@@ -111,6 +111,14 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 		return nil, fmt.Errorf("%w supporting model: %s (channel pricing restriction)", ErrNoAvailableAccounts, requestedModel)
 	}
 
+	platform, hasForcePlatform, err := s.resolvePlatform(ctx, groupID, group)
+	if err != nil {
+		return nil, err
+	}
+	if spResult, spErr := s.trySubPilotRecommendForGateway(ctx, groupID, sessionHash, requestedModel, excludedIDs, platform, hasForcePlatform); spResult != nil || spErr != nil {
+		return spResult, spErr
+	}
+
 	var stickyAccountID int64
 	var stickySource string
 	if prefetch := prefetchedStickyAccountIDFromContext(ctx, groupID); prefetch > 0 {
@@ -194,10 +202,6 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 		}
 	}
 
-	platform, hasForcePlatform, err := s.resolvePlatform(ctx, groupID, group)
-	if err != nil {
-		return nil, err
-	}
 	preferOAuth := platform == PlatformGemini
 	if s.debugModelRoutingEnabled() && platform == PlatformAnthropic && requestedModel != "" {
 		logger.LegacyPrintf("service.gateway", "[ModelRoutingDebug] load-aware enabled: group_id=%v model=%s session=%s platform=%s", derefGroupID(groupID), requestedModel, shortSessionHash(sessionHash), platform)

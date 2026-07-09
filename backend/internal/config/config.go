@@ -857,6 +857,17 @@ type GatewayConfig struct {
 	// UserMessageQueue: 用户消息串行队列配置
 	// 对 role:"user" 的真实用户消息实施账号级串行化 + RPM 自适应延迟
 	UserMessageQueue UserMessageQueueConfig `mapstructure:"user_message_queue"`
+
+	// SubPilot: optional external scheduler integration. Disabled by default.
+	SubPilot SubPilotConfig `mapstructure:"subpilot"`
+}
+
+type SubPilotConfig struct {
+	Enabled      bool   `mapstructure:"enabled"`
+	BaseURL      string `mapstructure:"base_url"`
+	TimeoutMS    int    `mapstructure:"timeout_ms"`
+	FailOpen     bool   `mapstructure:"fail_open"`
+	SharedSecret string `mapstructure:"shared_secret"`
 }
 
 // GatewayOpenAIHTTP2Config OpenAI HTTP 上游协议配置。
@@ -1538,6 +1549,11 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 		}
 		cfg.Gateway.ForcedCodexInstructionsTemplate = string(content)
 	}
+	cfg.Gateway.SubPilot.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.Gateway.SubPilot.BaseURL), "/")
+	cfg.Gateway.SubPilot.SharedSecret = strings.TrimSpace(cfg.Gateway.SubPilot.SharedSecret)
+	if cfg.Gateway.SubPilot.SharedSecret == "" {
+		cfg.Gateway.SubPilot.SharedSecret = strings.TrimSpace(os.Getenv("SUB2API_PROBE_SECRET"))
+	}
 
 	// 兼容旧键 gateway.openai_ws.sticky_previous_response_ttl_seconds。
 	// 新键未配置（<=0）时回退旧键；新键优先。
@@ -2045,6 +2061,11 @@ func setDefaults() {
 	viper.SetDefault("gateway.scheduling.outbox_lag_rebuild_failures", 3)
 	viper.SetDefault("gateway.scheduling.outbox_backlog_rebuild_rows", 10000)
 	viper.SetDefault("gateway.scheduling.full_rebuild_interval_seconds", 300)
+	viper.SetDefault("gateway.subpilot.enabled", false)
+	viper.SetDefault("gateway.subpilot.base_url", "")
+	viper.SetDefault("gateway.subpilot.timeout_ms", 80)
+	viper.SetDefault("gateway.subpilot.fail_open", true)
+	viper.SetDefault("gateway.subpilot.shared_secret", "")
 	viper.SetDefault("gateway.usage_record.worker_count", 128)
 	viper.SetDefault("gateway.usage_record.queue_size", 16384)
 	viper.SetDefault("gateway.usage_record.task_timeout_seconds", 5)

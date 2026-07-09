@@ -782,6 +782,9 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 			"model", requestedModel)
 		return nil, fmt.Errorf("%w supporting model: %s (channel pricing restriction)", ErrNoAvailableAccounts, requestedModel)
 	}
+	if spResult, spErr := s.trySubPilotRecommendForOpenAI(ctx, groupID, platform, sessionHash, requestedModel, excludedIDs, requireCompact, requiredCapability); spResult != nil || spErr != nil {
+		return spResult, spErr
+	}
 
 	cfg := s.schedulingConfig()
 	needsUpstreamCheck := s.needsUpstreamChannelRestrictionCheck(ctx, groupID)
