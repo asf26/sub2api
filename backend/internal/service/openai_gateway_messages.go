@@ -259,6 +259,13 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	}
 
 	// 6. Build upstream request
+	if account.Type == AccountTypeOAuth && account.Platform != PlatformGrok {
+		// Messages 兼容桥即使 body 未带 todo-guard/prompt_cache_key 标记（如映射到非
+		// gpt-5/codex 模型），也必须让 buildUpstreamRequest 走 bridge 分支：不带
+		// originator、User-Agent 逐字透传，避免身份收口（issue #3901）误改本路径
+		// 刻意最小化的请求形态（下方的 Del(OpenAI-Beta/originator) 兜底保持不变）。
+		setOpenAICompatMessagesBridgeContext(c, true)
+	}
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
 	var upstreamReq *http.Request
 	if account.Platform == PlatformGrok {
@@ -465,6 +472,18 @@ func (s *OpenAIGatewayService) handleAnthropicBufferedStreamingResponse(
 			return nil, s.newOpenAIStreamFailoverError(c, account, false, requestID, payload, message)
 		}
 		message = s.recordOpenAIStreamUpstreamError(c, account, false, requestID, "http_error", payload, message)
+		// 统一走语义状态推断 + body 归一化（与 /v1/responses 路径一致），
+		// 使按错误码配置的透传规则可命中。
+		if status, errType, errMsg, matched := applyOpenAIStreamFailedErrorPassthroughRule(
+			c, account.Platform, payload, message,
+		); matched {
+			if errMsg == "" {
+				errMsg = message
+			}
+			MarkResponseCommitted(c)
+			writeAnthropicError(c, status, errType, errMsg)
+			return nil, fmt.Errorf("upstream response failed (passthrough): %s", errMsg)
+		}
 		writeAnthropicError(c, http.StatusBadGateway, "api_error", message)
 		return nil, fmt.Errorf("upstream response failed: %s", message)
 	}
@@ -804,18 +823,30 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 					return true
 				}
 				message = s.recordOpenAIStreamUpstreamError(c, account, false, requestID, "http_error", payloadBytes, message)
+				errStatus, errType, errMsg := http.StatusBadGateway, "api_error", message
+				// 统一走语义状态推断 + body 归一化（与 /v1/responses 路径一致），
+				// 使按错误码配置的透传规则可命中。
+				if status, et, em, matched := applyOpenAIStreamFailedErrorPassthroughRule(
+					c, account.Platform, payloadBytes, message,
+				); matched {
+					if em == "" {
+						em = errMsg
+					}
+					errStatus, errType, errMsg = status, et, em
+					MarkResponseCommitted(c)
+				}
 				if !clientDisconnected {
 					if !clientOutputStarted {
-						writeAnthropicError(c, http.StatusBadGateway, "api_error", message)
+						writeAnthropicError(c, errStatus, errType, errMsg)
 						clientOutputStarted = true
 					} else {
 						writeStreamHeaders()
-						if _, err := fmt.Fprint(c.Writer, buildAnthropicStreamErrorSSE("api_error", message)); err == nil {
+						if _, err := fmt.Fprint(c.Writer, buildAnthropicStreamErrorSSE(errType, errMsg)); err == nil {
 							c.Writer.Flush()
 						}
 					}
 				}
-				streamNonFailoverErr = fmt.Errorf("upstream response failed: %s", message)
+				streamNonFailoverErr = fmt.Errorf("upstream response failed: %s", errMsg)
 				return true
 			}
 		}
@@ -1090,8 +1121,9 @@ func copyOpenAIUsageFromResponsesUsage(usage *apicompat.ResponsesUsage) OpenAIUs
 		return OpenAIUsage{}
 	}
 	result := OpenAIUsage{
-		InputTokens:  usage.InputTokens,
-		OutputTokens: usage.OutputTokens,
+		InputTokens:              usage.InputTokens,
+		OutputTokens:             usage.OutputTokens,
+		CacheCreationInputTokens: usage.CacheCreationInputTokens,
 	}
 	if usage.InputTokensDetails != nil {
 		result.CacheReadInputTokens = usage.InputTokensDetails.CachedTokens
