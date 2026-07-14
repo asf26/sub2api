@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -22,12 +23,44 @@ const (
 	subPilotSelectPath        = "/v1/dispatch/select"
 	subPilotReportSuccessPath = "/v1/dispatch/report-success"
 	subPilotReportFailurePath = "/v1/dispatch/report-failure"
+	subPilotRuntimeConfigPath = "/v1/dispatch/runtime-config"
 	subPilotDefaultTimeoutMS  = 80
+	subPilotConfigCacheTTL    = 5 * time.Second
+	subPilotReportTimeout     = 500 * time.Millisecond
+	subPilotReportQueueSize   = 16384
+	subPilotReportWorkers     = 8
+	subPilotMaxIdleConns      = 256
+	subPilotLeaseMaxAge       = 10 * time.Minute
+	subPilotLeaseSweepWait    = time.Minute
 )
 
 type subPilotClient struct {
 	cfg    config.SubPilotConfig
 	client *http.Client
+	state  *subPilotCircuitState
+}
+
+type subPilotRuntimeConfig struct {
+	DispatchEnabled            bool `json:"dispatchEnabled"`
+	DispatchFailOpen           bool `json:"dispatchFailOpen"`
+	DispatchSelectTimeoutMS    int  `json:"dispatchSelectTimeoutMs"`
+	DispatchAutoBypassFailures int  `json:"dispatchAutoBypassFailures"`
+	DispatchAutoRecover        bool `json:"dispatchAutoRecover"`
+}
+
+type subPilotCircuitState struct {
+	mu          sync.RWMutex
+	runtime     subPilotRuntimeConfig
+	lastRefresh time.Time
+	refreshing  bool
+	failures    atomic.Int64
+	bypassed    atomic.Bool
+}
+
+type subPilotReportJob struct {
+	client  subPilotClient
+	path    string
+	payload any
 }
 
 type subPilotSelectRequest struct {
@@ -88,6 +121,19 @@ type subPilotLeaseRecord struct {
 }
 
 var subPilotLeases sync.Map
+var subPilotCircuitStates sync.Map
+var subPilotSharedHTTPClient = newSubPilotSharedHTTPClient()
+var subPilotReportQueue = make(chan subPilotReportJob, subPilotReportQueueSize)
+var subPilotReportWorkersOnce sync.Once
+var subPilotLeaseSweeperOnce sync.Once
+var subPilotDroppedReports atomic.Uint64
+
+func newSubPilotSharedHTTPClient() *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.MaxIdleConns = subPilotMaxIdleConns
+	transport.MaxIdleConnsPerHost = subPilotMaxIdleConns
+	return &http.Client{Transport: transport}
+}
 
 func newSubPilotClient(cfg *config.Config) subPilotClient {
 	sp := config.SubPilotConfig{}
@@ -98,11 +144,19 @@ func newSubPilotClient(cfg *config.Config) subPilotClient {
 	if sp.TimeoutMS <= 0 {
 		sp.TimeoutMS = subPilotDefaultTimeoutMS
 	}
-	return subPilotClient{
-		cfg: sp,
-		client: &http.Client{
-			Timeout: time.Duration(sp.TimeoutMS) * time.Millisecond,
+	stateValue, _ := subPilotCircuitStates.LoadOrStore(sp.BaseURL, &subPilotCircuitState{
+		runtime: subPilotRuntimeConfig{
+			DispatchEnabled:            sp.Enabled,
+			DispatchFailOpen:           sp.FailOpen,
+			DispatchSelectTimeoutMS:    sp.TimeoutMS,
+			DispatchAutoBypassFailures: 3,
+			DispatchAutoRecover:        true,
 		},
+	})
+	return subPilotClient{
+		cfg:    sp,
+		client: subPilotSharedHTTPClient,
+		state:  stateValue.(*subPilotCircuitState),
 	}
 }
 
@@ -114,13 +168,28 @@ func (c subPilotClient) selectAccount(ctx context.Context, req subPilotSelectReq
 	if !c.enabled() {
 		return nil, nil
 	}
+	runtime := c.runtimeConfig(ctx)
+	if !runtime.DispatchEnabled || c.isBypassed(runtime) {
+		return nil, nil
+	}
 	if strings.TrimSpace(req.RequestID) == "" || strings.TrimSpace(req.Platform) == "" || strings.TrimSpace(req.Model) == "" {
 		return nil, nil
 	}
 	var resp subPilotSelectResponse
-	if err := c.postJSON(ctx, subPilotSelectPath, req, &resp); err != nil {
-		return nil, c.fail(err)
+	timeout := runtime.DispatchSelectTimeoutMS
+	if timeout <= 0 {
+		timeout = subPilotDefaultTimeoutMS
 	}
+	requestCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Millisecond)
+	defer cancel()
+	if err := c.postJSON(requestCtx, subPilotSelectPath, req, &resp); err != nil {
+		c.recordFailure(runtime)
+		if runtime.DispatchFailOpen {
+			return nil, nil
+		}
+		return nil, err
+	}
+	c.recordSuccess()
 	if resp.Decision != "selected" {
 		return nil, nil
 	}
@@ -135,21 +204,127 @@ func (c subPilotClient) selectAccount(ctx context.Context, req subPilotSelectReq
 	}, nil
 }
 
+func (c subPilotClient) runtimeConfig(ctx context.Context) subPilotRuntimeConfig {
+	if c.state == nil {
+		return subPilotRuntimeConfig{
+			DispatchEnabled: true, DispatchFailOpen: c.cfg.FailOpen,
+			DispatchSelectTimeoutMS: c.cfg.TimeoutMS, DispatchAutoBypassFailures: 3, DispatchAutoRecover: true,
+		}
+	}
+	c.state.mu.RLock()
+	cached := c.state.runtime
+	stale := c.state.lastRefresh.IsZero() || time.Since(c.state.lastRefresh) >= subPilotConfigCacheTTL
+	refreshing := c.state.refreshing
+	c.state.mu.RUnlock()
+	if !stale || refreshing {
+		return cached
+	}
+	c.state.mu.Lock()
+	if c.state.refreshing || (!c.state.lastRefresh.IsZero() && time.Since(c.state.lastRefresh) < subPilotConfigCacheTTL) {
+		cached = c.state.runtime
+		c.state.mu.Unlock()
+		return cached
+	}
+	c.state.refreshing = true
+	c.state.mu.Unlock()
+
+	refreshCtx, cancel := context.WithTimeout(ctx, time.Duration(max(c.cfg.TimeoutMS, subPilotDefaultTimeoutMS))*time.Millisecond)
+	defer cancel()
+	var next subPilotRuntimeConfig
+	err := c.getJSON(refreshCtx, subPilotRuntimeConfigPath, &next)
+	c.state.mu.Lock()
+	c.state.refreshing = false
+	c.state.lastRefresh = time.Now()
+	if err != nil {
+		cached = c.state.runtime
+		c.state.mu.Unlock()
+		return cached
+	}
+	if next.DispatchSelectTimeoutMS <= 0 {
+		next.DispatchSelectTimeoutMS = subPilotDefaultTimeoutMS
+	}
+	if next.DispatchAutoBypassFailures <= 0 {
+		next.DispatchAutoBypassFailures = 3
+	}
+	c.state.runtime = next
+	if c.state.bypassed.Load() && next.DispatchAutoRecover {
+		c.state.bypassed.Store(false)
+		c.state.failures.Store(0)
+	}
+	c.state.mu.Unlock()
+	return next
+}
+
+func (c subPilotClient) isBypassed(runtime subPilotRuntimeConfig) bool {
+	if c.state == nil {
+		return false
+	}
+	return c.state.bypassed.Load()
+}
+
+func (c subPilotClient) recordFailure(runtime subPilotRuntimeConfig) {
+	if c.state == nil {
+		return
+	}
+	threshold := runtime.DispatchAutoBypassFailures
+	if threshold <= 0 {
+		threshold = 3
+	}
+	if c.state.failures.Add(1) >= int64(threshold) {
+		c.state.bypassed.Store(true)
+	}
+}
+
+func (c subPilotClient) recordSuccess() {
+	if c.state == nil {
+		return
+	}
+	if c.state.failures.Load() != 0 {
+		c.state.failures.Store(0)
+	}
+	if c.state.bypassed.Load() {
+		c.state.bypassed.Store(false)
+	}
+}
+
 func (c subPilotClient) reportSuccess(ctx context.Context, req subPilotReportSuccessRequest) {
 	if !c.enabled() {
 		return
 	}
-	if err := c.postJSON(ctx, subPilotReportSuccessPath, req, nil); err != nil {
-		slog.Debug("subpilot report success failed", "error", err)
-	}
+	c.enqueueReport(subPilotReportSuccessPath, req)
 }
 
 func (c subPilotClient) reportFailure(ctx context.Context, req subPilotReportFailureRequest) {
 	if !c.enabled() {
 		return
 	}
-	if err := c.postJSON(ctx, subPilotReportFailurePath, req, nil); err != nil {
-		slog.Debug("subpilot report failure failed", "error", err)
+	c.enqueueReport(subPilotReportFailurePath, req)
+}
+
+func (c subPilotClient) enqueueReport(path string, payload any) {
+	subPilotReportWorkersOnce.Do(startSubPilotReportWorkers)
+	select {
+	case subPilotReportQueue <- subPilotReportJob{client: c, path: path, payload: payload}:
+	default:
+		dropped := subPilotDroppedReports.Add(1)
+		if dropped == 1 || dropped%1000 == 0 {
+			slog.Warn("subpilot report queue full", "dropped", dropped)
+		}
+	}
+}
+
+func startSubPilotReportWorkers() {
+	for index := 0; index < subPilotReportWorkers; index++ {
+		go func() {
+			for job := range subPilotReportQueue {
+				ctx, cancel := context.WithTimeout(context.Background(), subPilotReportTimeout)
+				err := job.client.postJSON(ctx, job.path, job.payload, nil)
+				cancel()
+				if err != nil {
+					slog.Debug("subpilot async report failed", "path", job.path, "error", err)
+				}
+			}
+		}()
 	}
 }
 
@@ -172,7 +347,7 @@ func (c subPilotClient) postJSON(ctx context.Context, path string, in any, out a
 		return err
 	}
 	defer resp.Body.Close()
-	raw, err := io.ReadAll(resp.Body)
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	if err != nil {
 		return err
 	}
@@ -183,6 +358,26 @@ func (c subPilotClient) postJSON(ctx context.Context, path string, in any, out a
 		return nil
 	}
 	return json.Unmarshal(raw, out)
+}
+
+func (c subPilotClient) getJSON(ctx context.Context, path string, out any) error {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, c.cfg.BaseURL+path, nil)
+	if err != nil {
+		return err
+	}
+	httpReq.Header.Set("Accept", "application/json")
+	if secret := strings.TrimSpace(c.cfg.SharedSecret); secret != "" {
+		httpReq.Header.Set("X-SubPilot-Secret", secret)
+	}
+	resp, err := c.client.Do(httpReq)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("subpilot status %d", resp.StatusCode)
+	}
+	return json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(out)
 }
 
 func (c subPilotClient) fail(err error) error {
@@ -213,9 +408,31 @@ func rememberSubPilotLease(requestID string, accountID int64, leaseID string) {
 	if requestID == "" || accountID <= 0 || leaseID == "" {
 		return
 	}
+	subPilotLeaseSweeperOnce.Do(startSubPilotLeaseSweeper)
 	subPilotLeases.Store(subPilotLeaseKey(requestID, accountID), subPilotLeaseRecord{
 		LeaseID:   leaseID,
 		CreatedAt: time.Now(),
+	})
+}
+
+func startSubPilotLeaseSweeper() {
+	go func() {
+		ticker := time.NewTicker(subPilotLeaseSweepWait)
+		defer ticker.Stop()
+		for now := range ticker.C {
+			cleanupSubPilotLeases(now, subPilotLeaseMaxAge)
+		}
+	}()
+}
+
+func cleanupSubPilotLeases(now time.Time, maxAge time.Duration) {
+	cutoff := now.Add(-maxAge)
+	subPilotLeases.Range(func(key, value any) bool {
+		record, ok := value.(subPilotLeaseRecord)
+		if !ok || record.CreatedAt.Before(cutoff) {
+			subPilotLeases.Delete(key)
+		}
+		return true
 	})
 }
 
