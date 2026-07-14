@@ -24,7 +24,7 @@ services:
   # Sub2API Application
   # ===========================================================================
   sub2api:
-    image: weishaw/sub2api:latest
+    image: ${SUB2API_IMAGE:-ghcr.io/asf26/sub2api:0.1.155-subpilot.1}
     container_name: sub2api
     restart: unless-stopped
     ulimits:
@@ -53,6 +53,7 @@ services:
       - SERVER_MODE=${SERVER_MODE:-release}
       - ENABLE_SERVER_TIMING=${ENABLE_SERVER_TIMING:-false}
       - RUN_MODE=${RUN_MODE:-standard}
+      - SUB2API_DISABLE_BINARY_UPDATE=${SUB2API_DISABLE_BINARY_UPDATE:-true}
 
       # =======================================================================
       # Database Configuration (PostgreSQL)

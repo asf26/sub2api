@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -129,7 +128,11 @@ var subPilotLeaseSweeperOnce sync.Once
 var subPilotDroppedReports atomic.Uint64
 
 func newSubPilotSharedHTTPClient() *http.Client {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+	defaultTransport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return &http.Client{Transport: http.DefaultTransport}
+	}
+	transport := defaultTransport.Clone()
 	transport.MaxIdleConns = subPilotMaxIdleConns
 	transport.MaxIdleConnsPerHost = subPilotMaxIdleConns
 	return &http.Client{Transport: transport}
@@ -144,7 +147,7 @@ func newSubPilotClient(cfg *config.Config) subPilotClient {
 	if sp.TimeoutMS <= 0 {
 		sp.TimeoutMS = subPilotDefaultTimeoutMS
 	}
-	stateValue, _ := subPilotCircuitStates.LoadOrStore(sp.BaseURL, &subPilotCircuitState{
+	defaultState := &subPilotCircuitState{
 		runtime: subPilotRuntimeConfig{
 			DispatchEnabled:            sp.Enabled,
 			DispatchFailOpen:           sp.FailOpen,
@@ -152,11 +155,17 @@ func newSubPilotClient(cfg *config.Config) subPilotClient {
 			DispatchAutoBypassFailures: 3,
 			DispatchAutoRecover:        true,
 		},
-	})
+	}
+	stateValue, _ := subPilotCircuitStates.LoadOrStore(sp.BaseURL, defaultState)
+	state, ok := stateValue.(*subPilotCircuitState)
+	if !ok {
+		state = defaultState
+		subPilotCircuitStates.Store(sp.BaseURL, state)
+	}
 	return subPilotClient{
 		cfg:    sp,
 		client: subPilotSharedHTTPClient,
-		state:  stateValue.(*subPilotCircuitState),
+		state:  state,
 	}
 }
 
@@ -346,7 +355,9 @@ func (c subPilotClient) postJSON(ctx context.Context, path string, in any, out a
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	if err != nil {
 		return err
@@ -373,18 +384,13 @@ func (c subPilotClient) getJSON(ctx context.Context, path string, out any) error
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("subpilot status %d", resp.StatusCode)
 	}
 	return json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(out)
-}
-
-func (c subPilotClient) fail(err error) error {
-	if err == nil || c.cfg.FailOpen {
-		return nil
-	}
-	return err
 }
 
 func subPilotRequestID(ctx context.Context, fallback string) string {
@@ -509,8 +515,4 @@ func subPilotPlatformForAccount(account *Account, fallback string) string {
 		return account.Platform
 	}
 	return fallback
-}
-
-func subPilotErrNoAccount() error {
-	return errors.New("subpilot selected account is not schedulable")
 }
