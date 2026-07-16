@@ -138,7 +138,7 @@ func (s *OpenAIGatewayService) findSubPilotOpenAIAccount(
 	if account == nil {
 		return nil, false
 	}
-	account = s.recheckSelectedOpenAIAccountFromDB(ctx, account, platform, requestedModel, requireCompact, requiredCapability)
+	account = s.recheckSelectedOpenAIAccountFromDB(ctx, account, groupID, platform, requestedModel, requireCompact, requiredCapability)
 	if account == nil {
 		return nil, false
 	}
