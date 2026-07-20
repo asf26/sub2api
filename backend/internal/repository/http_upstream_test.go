@@ -655,8 +655,10 @@ func (s *HTTPUpstreamSuite) TestOpenAICompactProfileUsesDedicatedHeaderTimeoutAn
 	require.NoError(s.T(), err)
 
 	require.NotSame(s.T(), normal, compact)
-	normalTransport := normal.client.Transport.(*http.Transport)
-	compactTransport := compact.client.Transport.(*http.Transport)
+	normalTransport, ok := normal.client.Transport.(*http.Transport)
+	require.True(s.T(), ok, "expected normal OpenAI transport")
+	compactTransport, ok := compact.client.Transport.(*http.Transport)
+	require.True(s.T(), ok, "expected compact OpenAI transport")
 	require.Equal(s.T(), 30*time.Second, normalTransport.ResponseHeaderTimeout)
 	require.Equal(s.T(), 120*time.Second, compactTransport.ResponseHeaderTimeout)
 }
@@ -669,7 +671,8 @@ func (s *HTTPUpstreamSuite) TestOpenAICompactProfileFallsBackToRegularHeaderTime
 	svc := s.newService()
 	entry, err := svc.getClientEntry("", 1, 1, service.HTTPUpstreamProfileOpenAICompact, false, false)
 	require.NoError(s.T(), err)
-	transport := entry.client.Transport.(*http.Transport)
+	transport, ok := entry.client.Transport.(*http.Transport)
+	require.True(s.T(), ok, "expected compact OpenAI transport")
 	require.Equal(s.T(), 30*time.Second, transport.ResponseHeaderTimeout)
 }
 
