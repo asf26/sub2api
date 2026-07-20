@@ -642,6 +642,37 @@ func (s *HTTPUpstreamSuite) TestOpenAIProfileCustomHeaderTimeout() {
 	require.Equal(s.T(), 1800*time.Second, transport.ResponseHeaderTimeout)
 }
 
+func (s *HTTPUpstreamSuite) TestOpenAICompactProfileUsesDedicatedHeaderTimeoutAndClient() {
+	s.cfg.Gateway = config.GatewayConfig{
+		OpenAIResponseHeaderTimeout:        30,
+		OpenAICompactResponseHeaderTimeout: 120,
+		OpenAIHTTP2:                        config.GatewayOpenAIHTTP2Config{Enabled: true},
+	}
+	svc := s.newService()
+	normal, err := svc.getClientEntry("", 1, 1, service.HTTPUpstreamProfileOpenAI, false, false)
+	require.NoError(s.T(), err)
+	compact, err := svc.getClientEntry("", 1, 1, service.HTTPUpstreamProfileOpenAICompact, false, false)
+	require.NoError(s.T(), err)
+
+	require.NotSame(s.T(), normal, compact)
+	normalTransport := normal.client.Transport.(*http.Transport)
+	compactTransport := compact.client.Transport.(*http.Transport)
+	require.Equal(s.T(), 30*time.Second, normalTransport.ResponseHeaderTimeout)
+	require.Equal(s.T(), 120*time.Second, compactTransport.ResponseHeaderTimeout)
+}
+
+func (s *HTTPUpstreamSuite) TestOpenAICompactProfileFallsBackToRegularHeaderTimeout() {
+	s.cfg.Gateway = config.GatewayConfig{
+		OpenAIResponseHeaderTimeout: 30,
+		OpenAIHTTP2:                 config.GatewayOpenAIHTTP2Config{Enabled: true},
+	}
+	svc := s.newService()
+	entry, err := svc.getClientEntry("", 1, 1, service.HTTPUpstreamProfileOpenAICompact, false, false)
+	require.NoError(s.T(), err)
+	transport := entry.client.Transport.(*http.Transport)
+	require.Equal(s.T(), 30*time.Second, transport.ResponseHeaderTimeout)
+}
+
 func (s *HTTPUpstreamSuite) TestOpenAIProfileTLSFingerprintDoesNotInheritGenericHeaderTimeout() {
 	s.cfg.Gateway = config.GatewayConfig{
 		ResponseHeaderTimeout: 600,

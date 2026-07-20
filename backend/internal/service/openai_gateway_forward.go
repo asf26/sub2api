@@ -981,13 +981,18 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	default:
 		targetURL = openaiPlatformAPIURL
 	}
-	targetURL = appendOpenAIResponsesRequestPathSuffix(targetURL, openAIResponsesRequestPathSuffix(c))
+	requestPathSuffix := openAIResponsesRequestPathSuffix(c)
+	targetURL = appendOpenAIResponsesRequestPathSuffix(targetURL, requestPathSuffix)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
-	req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileOpenAI))
+	upstreamProfile := HTTPUpstreamProfileOpenAI
+	if requestPathSuffix == "/compact" || strings.HasPrefix(requestPathSuffix, "/compact/") {
+		upstreamProfile = HTTPUpstreamProfileOpenAICompact
+	}
+	req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), upstreamProfile))
 
 	// Build authentication for this request. Agent Identity signs a fresh
 	// assertion here; OAuth/PAT/API-key keep their existing Bearer behavior.

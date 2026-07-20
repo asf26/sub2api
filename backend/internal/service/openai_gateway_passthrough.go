@@ -344,13 +344,18 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 			targetURL = buildOpenAIResponsesURL(validatedURL)
 		}
 	}
-	targetURL = appendOpenAIResponsesRequestPathSuffix(targetURL, openAIResponsesRequestPathSuffix(c))
+	requestPathSuffix := openAIResponsesRequestPathSuffix(c)
+	targetURL = appendOpenAIResponsesRequestPathSuffix(targetURL, requestPathSuffix)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
-	req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileOpenAI))
+	upstreamProfile := HTTPUpstreamProfileOpenAI
+	if requestPathSuffix == "/compact" || strings.HasPrefix(requestPathSuffix, "/compact/") {
+		upstreamProfile = HTTPUpstreamProfileOpenAICompact
+	}
+	req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), upstreamProfile))
 
 	// 透传客户端请求头（安全白名单）。
 	allowTimeoutHeaders := s.isOpenAIPassthroughTimeoutHeadersAllowed()
