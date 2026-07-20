@@ -115,7 +115,7 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 	if err != nil {
 		return nil, err
 	}
-	if spResult, spErr := s.trySubPilotRecommendForGateway(ctx, groupID, sessionHash, requestedModel, excludedIDs, platform, hasForcePlatform); spResult != nil || spErr != nil {
+	if spResult, spHandled, spErr := s.trySubPilotRecommendForGateway(ctx, groupID, sessionHash, requestedModel, excludedIDs, platform, hasForcePlatform); spHandled {
 		return spResult, spErr
 	}
 

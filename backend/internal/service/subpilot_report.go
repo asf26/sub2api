@@ -17,9 +17,10 @@ func (s *GatewayService) reportSubPilotSuccess(ctx context.Context, usageLog *Us
 		return
 	}
 	stream := usageLog.Stream
+	requestID := subPilotRequestID(ctx, usageLog.RequestID)
 	client.reportSuccess(detachedSubPilotReportContext(ctx), subPilotReportSuccessRequest{
-		RequestID:       usageLog.RequestID,
-		LeaseID:         takeSubPilotLease(usageLog.RequestID, usageLog.AccountID),
+		RequestID:       requestID,
+		LeaseID:         takeSubPilotLease(requestID, usageLog.AccountID),
 		APIKeyID:        subPilotAPIKeyID(usageLog.APIKeyID),
 		AccountID:       strconv.FormatInt(usageLog.AccountID, 10),
 		Platform:        subPilotPlatformForAccount(account, ""),
@@ -42,9 +43,10 @@ func (s *OpenAIGatewayService) reportSubPilotSuccess(ctx context.Context, usageL
 		return
 	}
 	stream := usageLog.Stream
+	requestID := subPilotRequestID(ctx, usageLog.RequestID)
 	client.reportSuccess(detachedSubPilotReportContext(ctx), subPilotReportSuccessRequest{
-		RequestID:       usageLog.RequestID,
-		LeaseID:         takeSubPilotLease(usageLog.RequestID, usageLog.AccountID),
+		RequestID:       requestID,
+		LeaseID:         takeSubPilotLease(requestID, usageLog.AccountID),
 		APIKeyID:        subPilotAPIKeyID(usageLog.APIKeyID),
 		AccountID:       strconv.FormatInt(usageLog.AccountID, 10),
 		Platform:        subPilotPlatformForAccount(account, PlatformOpenAI),
@@ -58,7 +60,7 @@ func (s *OpenAIGatewayService) reportSubPilotSuccess(ctx context.Context, usageL
 	})
 }
 
-func (s *OpenAIGatewayService) reportSubPilotFailureForOpenAI(accountID int64) {
+func (s *OpenAIGatewayService) reportSubPilotFailureForOpenAIWithContext(ctx context.Context, accountID int64) {
 	if s == nil || accountID <= 0 {
 		return
 	}
@@ -80,10 +82,11 @@ func (s *OpenAIGatewayService) reportSubPilotFailureForOpenAI(accountID int64) {
 			}
 		}
 	}
-	requestID := "schedule-failure-" + accountIDText + "-" + strconv.FormatInt(time.Now().UnixNano(), 10)
-	client.reportFailure(detachedSubPilotReportContext(context.Background()), subPilotReportFailureRequest{
+	fallbackRequestID := "schedule-failure-" + accountIDText + "-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	requestID := subPilotRequestID(ctx, fallbackRequestID)
+	client.reportFailure(detachedSubPilotReportContext(ctx), subPilotReportFailureRequest{
 		RequestID:    requestID,
-		LeaseID:      syntheticSubPilotLease(requestID, accountID),
+		LeaseID:      takeSubPilotLease(requestID, accountID),
 		AccountID:    accountIDText,
 		Platform:     platform,
 		GroupID:      groupID,

@@ -1975,6 +1975,23 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 	ctx = s.withOpenAIQuotaAutoPauseContext(ctx)
 	platform = normalizeOpenAICompatiblePlatform(platform)
 	decision := OpenAIAccountScheduleDecision{}
+	if s.checkChannelPricingRestriction(ctx, groupID, requestedModel) {
+		slog.Warn("channel pricing restriction blocked request",
+			"group_id", derefGroupID(groupID),
+			"model", requestedModel)
+		return nil, decision, fmt.Errorf("%w supporting model: %s (channel pricing restriction)", ErrNoAvailableAccounts, requestedModel)
+	}
+	if groupID != nil && requestedModel != "" {
+		if selection, handled, subPilotErr := s.trySubPilotRecommendForOpenAI(ctx, groupID, platform, sessionHash, requestedModel, excludedIDs, requireCompact, requiredCapability, requiredTransport, requiredImageCapability); handled {
+			decision.Layer = "subpilot"
+			if subPilotErr != nil {
+				return nil, decision, subPilotErr
+			}
+			decision.SelectedAccountID = selection.Account.ID
+			decision.SelectedAccountType = selection.Account.Type
+			return selection, decision, nil
+		}
+	}
 	scheduler := s.getOpenAIAccountScheduler(ctx)
 	if scheduler == nil {
 		decision.Layer = openAIAccountScheduleLayerLoadBalance
@@ -2028,13 +2045,6 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 			}
 			effectiveExcludedIDs[selection.Account.ID] = struct{}{}
 		}
-	}
-
-	if s.checkChannelPricingRestriction(ctx, groupID, requestedModel) {
-		slog.Warn("channel pricing restriction blocked request",
-			"group_id", derefGroupID(groupID),
-			"model", requestedModel)
-		return nil, decision, fmt.Errorf("%w supporting model: %s (channel pricing restriction)", ErrNoAvailableAccounts, requestedModel)
 	}
 
 	var stickyAccountID int64
@@ -2112,10 +2122,14 @@ func (s *OpenAIGatewayService) isOpenAIAccountTransportCompatible(account *Accou
 }
 
 func (s *OpenAIGatewayService) ReportOpenAIAccountScheduleResult(accountID int64, model string, success bool, firstTokenMs *int) {
+	s.ReportOpenAIAccountScheduleResultWithContext(context.Background(), accountID, model, success, firstTokenMs)
+}
+
+func (s *OpenAIGatewayService) ReportOpenAIAccountScheduleResultWithContext(ctx context.Context, accountID int64, model string, success bool, firstTokenMs *int) {
 	if success {
 		s.clearOpenAIAccountModelTransientState(accountID, normalizeOpenAIAccountModelTransientModel(model))
 	} else {
-		s.reportSubPilotFailureForOpenAI(accountID)
+		s.reportSubPilotFailureForOpenAIWithContext(ctx, accountID)
 	}
 	scheduler := s.getOpenAIAccountScheduler(context.Background())
 	if scheduler == nil {

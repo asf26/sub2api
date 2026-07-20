@@ -20,6 +20,7 @@ import (
 
 const (
 	subPilotSelectPath        = "/v1/dispatch/select"
+	subPilotReleaseLeasePath  = "/v1/dispatch/release-lease"
 	subPilotReportSuccessPath = "/v1/dispatch/report-success"
 	subPilotReportFailurePath = "/v1/dispatch/report-failure"
 	subPilotRuntimeConfigPath = "/v1/dispatch/runtime-config"
@@ -63,11 +64,12 @@ type subPilotReportJob struct {
 }
 
 type subPilotSelectRequest struct {
-	RequestID  string `json:"request_id"`
-	Platform   string `json:"platform"`
-	GroupID    string `json:"group_id,omitempty"`
-	Model      string `json:"model"`
-	SessionKey string `json:"session_key,omitempty"`
+	RequestID          string   `json:"request_id"`
+	Platform           string   `json:"platform"`
+	GroupID            string   `json:"group_id,omitempty"`
+	Model              string   `json:"model"`
+	SessionKey         string   `json:"session_key,omitempty"`
+	ExcludedAccountIDs []string `json:"excluded_account_ids,omitempty"`
 }
 
 type subPilotSelectResponse struct {
@@ -84,6 +86,12 @@ type subPilotRecommendation struct {
 	AccountID int64
 	LeaseID   string
 	RequestID string
+}
+
+type subPilotReleaseLeaseRequest struct {
+	RequestID string `json:"request_id"`
+	LeaseID   string `json:"lease_id"`
+	AccountID string `json:"account_id"`
 }
 
 type subPilotReportSuccessRequest struct {
@@ -174,15 +182,26 @@ func (c subPilotClient) enabled() bool {
 }
 
 func (c subPilotClient) selectAccount(ctx context.Context, req subPilotSelectRequest) (*subPilotRecommendation, error) {
+	recommendation, _, err := c.selectAccountWithOwnership(ctx, req)
+	return recommendation, err
+}
+
+func (c subPilotClient) selectAccountWithOwnership(ctx context.Context, req subPilotSelectRequest) (*subPilotRecommendation, bool, error) {
 	if !c.enabled() {
-		return nil, nil
+		return nil, false, nil
 	}
 	runtime := c.runtimeConfig(ctx)
-	if !runtime.DispatchEnabled || c.isBypassed(runtime) {
-		return nil, nil
+	if !runtime.DispatchEnabled {
+		return nil, false, nil
+	}
+	if c.isBypassed(runtime) {
+		if runtime.DispatchFailOpen {
+			return nil, false, nil
+		}
+		return nil, true, fmt.Errorf("subpilot dispatch is temporarily bypassed after repeated failures")
 	}
 	if strings.TrimSpace(req.RequestID) == "" || strings.TrimSpace(req.Platform) == "" || strings.TrimSpace(req.Model) == "" {
-		return nil, nil
+		return nil, true, fmt.Errorf("subpilot select request is missing required routing metadata")
 	}
 	var resp subPilotSelectResponse
 	timeout := runtime.DispatchSelectTimeoutMS
@@ -194,23 +213,27 @@ func (c subPilotClient) selectAccount(ctx context.Context, req subPilotSelectReq
 	if err := c.postJSON(requestCtx, subPilotSelectPath, req, &resp); err != nil {
 		c.recordFailure(runtime)
 		if runtime.DispatchFailOpen {
-			return nil, nil
+			return nil, false, nil
 		}
-		return nil, err
+		return nil, true, err
 	}
 	c.recordSuccess()
 	if resp.Decision != "selected" {
-		return nil, nil
+		return nil, true, nil
 	}
 	accountID, err := strconv.ParseInt(strings.TrimSpace(resp.Account.ID), 10, 64)
-	if err != nil || accountID <= 0 {
-		return nil, nil
+	if err != nil || accountID <= 0 || strings.TrimSpace(resp.Lease.ID) == "" {
+		c.recordFailure(runtime)
+		if runtime.DispatchFailOpen {
+			return nil, false, nil
+		}
+		return nil, true, fmt.Errorf("subpilot select returned invalid account or lease")
 	}
 	return &subPilotRecommendation{
 		AccountID: accountID,
 		LeaseID:   strings.TrimSpace(resp.Lease.ID),
 		RequestID: req.RequestID,
-	}, nil
+	}, true, nil
 }
 
 func (c subPilotClient) runtimeConfig(ctx context.Context) subPilotRuntimeConfig {
@@ -308,6 +331,13 @@ func (c subPilotClient) reportFailure(ctx context.Context, req subPilotReportFai
 		return
 	}
 	c.enqueueReport(subPilotReportFailurePath, req)
+}
+
+func (c subPilotClient) releaseLease(ctx context.Context, req subPilotReleaseLeaseRequest) {
+	if !c.enabled() {
+		return
+	}
+	c.enqueueReport(subPilotReleaseLeasePath, req)
 }
 
 func (c subPilotClient) enqueueReport(path string, payload any) {

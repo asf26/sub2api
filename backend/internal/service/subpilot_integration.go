@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"log/slog"
+	"sort"
+	"strconv"
 )
 
 func (s *GatewayService) trySubPilotRecommendForGateway(
@@ -13,58 +15,72 @@ func (s *GatewayService) trySubPilotRecommendForGateway(
 	excludedIDs map[int64]struct{},
 	platform string,
 	hasForcePlatform bool,
-) (*AccountSelectionResult, error) {
+) (*AccountSelectionResult, bool, error) {
 	if s == nil {
-		return nil, nil
+		return nil, false, nil
 	}
 	client := newSubPilotClient(s.cfg)
 	if !client.enabled() {
-		return nil, nil
+		return nil, false, nil
 	}
 	requestID := subPilotRequestID(ctx, "")
-	rec, err := client.selectAccount(ctx, subPilotSelectRequest{
-		RequestID:  requestID,
-		Platform:   platform,
-		GroupID:    subPilotGroupID(groupID),
-		Model:      requestedModel,
-		SessionKey: sessionHash,
-	})
-	if err != nil {
-		return nil, err
+	localExcluded := cloneSubPilotExcludedIDs(excludedIDs)
+	for {
+		rec, handled, err := client.selectAccountWithOwnership(ctx, subPilotSelectRequest{
+			RequestID:          requestID,
+			Platform:           platform,
+			GroupID:            subPilotGroupID(groupID),
+			Model:              requestedModel,
+			SessionKey:         sessionHash,
+			ExcludedAccountIDs: subPilotExcludedAccountIDs(localExcluded),
+		})
+		if err != nil || !handled {
+			return nil, handled, err
+		}
+		if rec == nil {
+			return nil, true, ErrNoAvailableAccounts
+		}
+		if _, excluded := localExcluded[rec.AccountID]; excluded {
+			releaseSubPilotRecommendation(client, rec)
+			return nil, true, ErrNoAvailableAccounts
+		}
+		accounts, _, listErr := s.listSchedulableAccounts(ctx, groupID, platform, hasForcePlatform)
+		if listErr != nil {
+			releaseSubPilotRecommendation(client, rec)
+			return nil, true, listErr
+		}
+		account := findSubPilotAccount(accounts, rec.AccountID)
+		if account == nil || !account.IsSchedulableForModelWithContext(ctx, requestedModel) || shouldClearStickySession(account, requestedModel) {
+			releaseSubPilotRecommendation(client, rec)
+			localExcluded[rec.AccountID] = struct{}{}
+			continue
+		}
+		result, acquireErr := s.tryAcquireAccountSlot(ctx, account.ID, account.Concurrency)
+		if acquireErr != nil {
+			releaseSubPilotRecommendation(client, rec)
+			return nil, true, acquireErr
+		}
+		if result == nil || !result.Acquired {
+			releaseSubPilotRecommendation(client, rec)
+			localExcluded[rec.AccountID] = struct{}{}
+			continue
+		}
+		if !s.checkAndRegisterSession(ctx, account, sessionHash) {
+			result.ReleaseFunc()
+			releaseSubPilotRecommendation(client, rec)
+			localExcluded[rec.AccountID] = struct{}{}
+			continue
+		}
+		selection, selectionErr := s.newSelectionResult(ctx, account, true, result.ReleaseFunc, nil)
+		if selectionErr != nil {
+			result.ReleaseFunc()
+			releaseSubPilotRecommendation(client, rec)
+			return nil, true, selectionErr
+		}
+		rememberSubPilotLease(rec.RequestID, account.ID, rec.LeaseID)
+		slog.Debug("subpilot selected gateway account", "account_id", account.ID, "group_id", derefGroupID(groupID), "platform", platform)
+		return selection, true, nil
 	}
-	if rec == nil {
-		return nil, nil
-	}
-	if _, excluded := excludedIDs[rec.AccountID]; excluded {
-		return nil, nil
-	}
-	accounts, _, err := s.listSchedulableAccounts(ctx, groupID, platform, hasForcePlatform)
-	if err != nil {
-		return nil, nil
-	}
-	account := findSubPilotAccount(accounts, rec.AccountID)
-	if account == nil || !account.IsSchedulableForModelWithContext(ctx, requestedModel) {
-		return nil, nil
-	}
-	if shouldClearStickySession(account, requestedModel) {
-		return nil, nil
-	}
-	result, err := s.tryAcquireAccountSlot(ctx, account.ID, account.Concurrency)
-	if err != nil || result == nil || !result.Acquired {
-		return nil, nil
-	}
-	if !s.checkAndRegisterSession(ctx, account, sessionHash) {
-		result.ReleaseFunc()
-		return nil, nil
-	}
-	selection, err := s.newSelectionResult(ctx, account, true, result.ReleaseFunc, nil)
-	if err != nil {
-		result.ReleaseFunc()
-		return nil, err
-	}
-	rememberSubPilotLease(rec.RequestID, account.ID, rec.LeaseID)
-	slog.Debug("subpilot selected gateway account", "account_id", account.ID, "group_id", derefGroupID(groupID), "platform", platform)
-	return selection, nil
 }
 
 func (s *OpenAIGatewayService) trySubPilotRecommendForOpenAI(
@@ -76,49 +92,100 @@ func (s *OpenAIGatewayService) trySubPilotRecommendForOpenAI(
 	excludedIDs map[int64]struct{},
 	requireCompact bool,
 	requiredCapability OpenAIEndpointCapability,
-) (*AccountSelectionResult, error) {
+	requiredTransport OpenAIUpstreamTransport,
+	requiredImageCapability OpenAIImagesCapability,
+) (*AccountSelectionResult, bool, error) {
 	if s == nil {
-		return nil, nil
+		return nil, false, nil
 	}
 	client := newSubPilotClient(s.cfg)
 	if !client.enabled() {
-		return nil, nil
+		return nil, false, nil
 	}
 	requestID := subPilotRequestID(ctx, "")
-	rec, err := client.selectAccount(ctx, subPilotSelectRequest{
-		RequestID:  requestID,
-		Platform:   platform,
-		GroupID:    subPilotGroupID(groupID),
-		Model:      requestedModel,
-		SessionKey: sessionHash,
+	localExcluded := cloneSubPilotExcludedIDs(excludedIDs)
+	for {
+		rec, handled, err := client.selectAccountWithOwnership(ctx, subPilotSelectRequest{
+			RequestID:          requestID,
+			Platform:           platform,
+			GroupID:            subPilotGroupID(groupID),
+			Model:              requestedModel,
+			SessionKey:         sessionHash,
+			ExcludedAccountIDs: subPilotExcludedAccountIDs(localExcluded),
+		})
+		if err != nil || !handled {
+			return nil, handled, err
+		}
+		if rec == nil {
+			return nil, true, ErrNoAvailableAccounts
+		}
+		if _, excluded := localExcluded[rec.AccountID]; excluded {
+			releaseSubPilotRecommendation(client, rec)
+			return nil, true, ErrNoAvailableAccounts
+		}
+		account, ok := s.findSubPilotOpenAIAccount(ctx, rec.AccountID, groupID, platform, requestedModel, requireCompact, requiredCapability, requiredTransport, requiredImageCapability)
+		if !ok {
+			releaseSubPilotRecommendation(client, rec)
+			localExcluded[rec.AccountID] = struct{}{}
+			continue
+		}
+		result, acquireErr := s.tryAcquireAccountSlot(ctx, account.ID, account.Concurrency)
+		if acquireErr != nil {
+			releaseSubPilotRecommendation(client, rec)
+			return nil, true, acquireErr
+		}
+		if result == nil || !result.Acquired {
+			releaseSubPilotRecommendation(client, rec)
+			localExcluded[rec.AccountID] = struct{}{}
+			continue
+		}
+		selection, selectionErr := s.newAcquiredSelectionResult(ctx, account, result.ReleaseFunc)
+		if selectionErr != nil {
+			result.ReleaseFunc()
+			releaseSubPilotRecommendation(client, rec)
+			return nil, true, selectionErr
+		}
+		if sessionHash != "" {
+			_ = s.refreshStickySessionTTL(ctx, groupID, sessionHash, openaiStickySessionTTL)
+		}
+		rememberSubPilotLease(rec.RequestID, account.ID, rec.LeaseID)
+		slog.Debug("subpilot selected openai account", "account_id", account.ID, "group_id", derefGroupID(groupID), "platform", platform)
+		return selection, true, nil
+	}
+}
+
+func cloneSubPilotExcludedIDs(excludedIDs map[int64]struct{}) map[int64]struct{} {
+	cloned := make(map[int64]struct{}, len(excludedIDs))
+	for accountID := range excludedIDs {
+		cloned[accountID] = struct{}{}
+	}
+	return cloned
+}
+
+func subPilotExcludedAccountIDs(excludedIDs map[int64]struct{}) []string {
+	ids := make([]int64, 0, len(excludedIDs))
+	for accountID := range excludedIDs {
+		if accountID > 0 {
+			ids = append(ids, accountID)
+		}
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	result := make([]string, 0, len(ids))
+	for _, accountID := range ids {
+		result = append(result, strconv.FormatInt(accountID, 10))
+	}
+	return result
+}
+
+func releaseSubPilotRecommendation(client subPilotClient, rec *subPilotRecommendation) {
+	if rec == nil || rec.AccountID <= 0 || rec.LeaseID == "" {
+		return
+	}
+	client.releaseLease(context.Background(), subPilotReleaseLeaseRequest{
+		RequestID: rec.RequestID,
+		LeaseID:   rec.LeaseID,
+		AccountID: strconv.FormatInt(rec.AccountID, 10),
 	})
-	if err != nil {
-		return nil, err
-	}
-	if rec == nil {
-		return nil, nil
-	}
-	if _, excluded := excludedIDs[rec.AccountID]; excluded {
-		return nil, nil
-	}
-	account, ok := s.findSubPilotOpenAIAccount(ctx, rec.AccountID, groupID, platform, requestedModel, requireCompact, requiredCapability)
-	if !ok {
-		return nil, nil
-	}
-	result, err := s.tryAcquireAccountSlot(ctx, account.ID, account.Concurrency)
-	if err != nil || result == nil || !result.Acquired {
-		return nil, nil
-	}
-	selection, err := s.newAcquiredSelectionResult(ctx, account, result.ReleaseFunc)
-	if err != nil {
-		return nil, err
-	}
-	if sessionHash != "" {
-		_ = s.refreshStickySessionTTL(ctx, groupID, sessionHash, openaiStickySessionTTL)
-	}
-	rememberSubPilotLease(rec.RequestID, account.ID, rec.LeaseID)
-	slog.Debug("subpilot selected openai account", "account_id", account.ID, "group_id", derefGroupID(groupID), "platform", platform)
-	return selection, nil
 }
 
 func (s *OpenAIGatewayService) findSubPilotOpenAIAccount(
@@ -129,6 +196,8 @@ func (s *OpenAIGatewayService) findSubPilotOpenAIAccount(
 	requestedModel string,
 	requireCompact bool,
 	requiredCapability OpenAIEndpointCapability,
+	requiredTransport OpenAIUpstreamTransport,
+	requiredImageCapability OpenAIImagesCapability,
 ) (*Account, bool) {
 	accounts, err := s.listSchedulableAccounts(ctx, groupID, platform)
 	if err != nil {
@@ -136,6 +205,9 @@ func (s *OpenAIGatewayService) findSubPilotOpenAIAccount(
 	}
 	account := findSubPilotAccount(accounts, accountID)
 	if account == nil {
+		return nil, false
+	}
+	if !s.isOpenAIAccountTransportCompatible(account, requiredTransport) || !accountSupportsOpenAICapabilities(account, requiredCapability, requiredImageCapability) {
 		return nil, false
 	}
 	account = s.recheckSelectedOpenAIAccountFromDB(ctx, account, groupID, platform, requestedModel, requireCompact, requiredCapability)
