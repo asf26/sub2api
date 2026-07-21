@@ -113,6 +113,50 @@ func TestSubPilotFailureReportUsesOriginalRequestLease(t *testing.T) {
 	}
 }
 
+func TestSubPilotOpenAISuccessReportUsesOriginalRequestLease(t *testing.T) {
+	reports := make(chan subPilotReportSuccessRequest, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != subPilotReportSuccessPath {
+			http.NotFound(w, r)
+			return
+		}
+		var req subPilotReportSuccessRequest
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+		reports <- req
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	const (
+		requestID = "client-request-success-1"
+		accountID = int64(791)
+		leaseID   = "lease-original-success-791"
+	)
+	leaseKey := subPilotLeaseKey(requestID, accountID)
+	t.Cleanup(func() { subPilotLeases.Delete(leaseKey) })
+
+	cfg := &config.Config{}
+	cfg.Gateway.SubPilot = config.SubPilotConfig{Enabled: true, BaseURL: server.URL, TimeoutMS: 200, FailOpen: true}
+	service := &OpenAIGatewayService{cfg: cfg}
+	ctx := context.WithValue(context.Background(), ctxkey.ClientRequestID, requestID)
+	rememberSubPilotLease(requestID, accountID, leaseID)
+	service.reportSubPilotSuccess(ctx, &UsageLog{
+		RequestID: "upstream-response-id",
+		AccountID: accountID,
+		APIKeyID:  5,
+		Model:     "gpt-test",
+	}, &Account{ID: accountID, Platform: PlatformOpenAI})
+
+	select {
+	case req := <-reports:
+		require.Equal(t, requestID, req.RequestID)
+		require.Equal(t, leaseID, req.LeaseID)
+		require.Equal(t, "791", req.AccountID)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for SubPilot success report")
+	}
+}
+
 func TestSubPilotGatewayAccountEligibilityRejectsUnsupportedModel(t *testing.T) {
 	svc := &GatewayService{}
 	account := &Account{
