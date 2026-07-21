@@ -113,6 +113,24 @@ func TestSubPilotFailureReportUsesOriginalRequestLease(t *testing.T) {
 	}
 }
 
+func TestSubPilotGatewayAccountEligibilityRejectsUnsupportedModel(t *testing.T) {
+	svc := &GatewayService{}
+	account := &Account{
+		Platform:    PlatformAnthropic,
+		Type:        AccountTypeAPIKey,
+		Status:      StatusActive,
+		Schedulable: true,
+		Credentials: map[string]any{
+			"model_mapping": map[string]any{
+				"claude-opus-4-6": "claude-opus-4-6",
+			},
+		},
+	}
+
+	require.False(t, svc.isSubPilotGatewayAccountEligible(context.Background(), account, "claude-fable-5"))
+	require.True(t, svc.isSubPilotGatewayAccountEligible(context.Background(), account, "claude-opus-4-6"))
+}
+
 func TestOpenAIGatewayService_SubPilotNoChannelDoesNotFallBackToNativeScheduler(t *testing.T) {
 	resetOpenAIAdvancedSchedulerSettingCacheForTest()
 

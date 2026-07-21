@@ -50,7 +50,7 @@ func (s *GatewayService) trySubPilotRecommendForGateway(
 			return nil, true, listErr
 		}
 		account := findSubPilotAccount(accounts, rec.AccountID)
-		if account == nil || !account.IsSchedulableForModelWithContext(ctx, requestedModel) || shouldClearStickySession(account, requestedModel) {
+		if !s.isSubPilotGatewayAccountEligible(ctx, account, requestedModel) {
 			releaseSubPilotRecommendation(client, rec)
 			localExcluded[rec.AccountID] = struct{}{}
 			continue
@@ -81,6 +81,13 @@ func (s *GatewayService) trySubPilotRecommendForGateway(
 		slog.Debug("subpilot selected gateway account", "account_id", account.ID, "group_id", derefGroupID(groupID), "platform", platform)
 		return selection, true, nil
 	}
+}
+
+func (s *GatewayService) isSubPilotGatewayAccountEligible(ctx context.Context, account *Account, requestedModel string) bool {
+	return account != nil &&
+		s.isModelSupportedByAccountWithContext(ctx, account, requestedModel) &&
+		account.IsSchedulableForModelWithContext(ctx, requestedModel) &&
+		!shouldClearStickySession(account, requestedModel)
 }
 
 func (s *OpenAIGatewayService) trySubPilotRecommendForOpenAI(
