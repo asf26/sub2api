@@ -269,3 +269,88 @@ func TestOpenAIGatewayService_SubPilotReceivesFailedAccountExclusions(t *testing
 		t.Fatal("timed out waiting for SubPilot select request")
 	}
 }
+
+func TestOpenAIGatewayService_SubPilotAcceptsExplicitLastResortExcludedAccount(t *testing.T) {
+	resetOpenAIAdvancedSchedulerSettingCacheForTest()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case subPilotRuntimeConfigPath:
+			_ = json.NewEncoder(w).Encode(subPilotRuntimeConfig{
+				DispatchEnabled: true, DispatchFailOpen: true, DispatchSelectTimeoutMS: 200,
+				DispatchAutoBypassFailures: 3, DispatchAutoRecover: true,
+			})
+		case subPilotSelectPath:
+			var req subPilotSelectRequest
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+			require.Equal(t, []string{"37131"}, req.ExcludedAccountIDs)
+			_, _ = w.Write([]byte(`{"decision":"selected","reason":"last_resort","account":{"id":"37131"},"lease":{"id":"lease-37131"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	groupID := int64(10220)
+	accounts := []Account{{
+		ID: 37131, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+		Status: StatusActive, Schedulable: true, Concurrency: 1,
+	}}
+	cfg := &config.Config{}
+	cfg.Gateway.Scheduling.LoadBatchEnabled = false
+	cfg.Gateway.SubPilot = config.SubPilotConfig{Enabled: true, BaseURL: server.URL, TimeoutMS: 200, FailOpen: true}
+	svc := &OpenAIGatewayService{
+		accountRepo:        schedulerTestOpenAIAccountRepo{accounts: accounts},
+		cache:              &schedulerTestGatewayCache{},
+		cfg:                cfg,
+		concurrencyService: NewConcurrencyService(schedulerTestConcurrencyCache{}),
+	}
+
+	selection, decision, err := svc.SelectAccountWithScheduler(
+		context.Background(), &groupID, "", "", "gpt-5.4",
+		map[int64]struct{}{37131: {}}, OpenAIUpstreamTransportAny, false,
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(37131), selection.Account.ID)
+	require.Equal(t, "subpilot", decision.Layer)
+}
+
+func TestGatewaySubPilotAcceptsExplicitLastResortExcludedAccount(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case subPilotRuntimeConfigPath:
+			_ = json.NewEncoder(w).Encode(subPilotRuntimeConfig{
+				DispatchEnabled: true, DispatchFailOpen: true, DispatchSelectTimeoutMS: 200,
+				DispatchAutoBypassFailures: 3, DispatchAutoRecover: true,
+			})
+		case subPilotSelectPath:
+			var req subPilotSelectRequest
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+			require.Equal(t, []string{"37201"}, req.ExcludedAccountIDs)
+			_, _ = w.Write([]byte(`{"decision":"selected","reason":"last_resort","account":{"id":"37201"},"lease":{"id":"lease-37201"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	groupID := int64(10221)
+	account := Account{
+		ID: 37201, Platform: PlatformAnthropic, Type: AccountTypeAPIKey,
+		Status: StatusActive, Schedulable: true, Concurrency: 1,
+	}
+	cfg := &config.Config{}
+	cfg.Gateway.SubPilot = config.SubPilotConfig{Enabled: true, BaseURL: server.URL, TimeoutMS: 200, FailOpen: true}
+	svc := &GatewayService{
+		accountRepo: schedulerTestOpenAIAccountRepo{accounts: []Account{account}},
+		cfg:         cfg,
+	}
+
+	selection, handled, err := svc.trySubPilotRecommendForGateway(
+		context.Background(), &groupID, "", "claude-opus-4-6",
+		map[int64]struct{}{account.ID: {}}, PlatformAnthropic, true,
+	)
+	require.NoError(t, err)
+	require.True(t, handled)
+	require.Equal(t, account.ID, selection.Account.ID)
+}

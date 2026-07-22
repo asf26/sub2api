@@ -74,6 +74,7 @@ type subPilotSelectRequest struct {
 
 type subPilotSelectResponse struct {
 	Decision string `json:"decision"`
+	Reason   string `json:"reason"`
 	Account  struct {
 		ID string `json:"id"`
 	} `json:"account"`
@@ -83,9 +84,10 @@ type subPilotSelectResponse struct {
 }
 
 type subPilotRecommendation struct {
-	AccountID int64
-	LeaseID   string
-	RequestID string
+	AccountID  int64
+	LeaseID    string
+	RequestID  string
+	LastResort bool
 }
 
 type subPilotReleaseLeaseRequest struct {
@@ -230,9 +232,10 @@ func (c subPilotClient) selectAccountWithOwnership(ctx context.Context, req subP
 		return nil, true, fmt.Errorf("subpilot select returned invalid account or lease")
 	}
 	return &subPilotRecommendation{
-		AccountID: accountID,
-		LeaseID:   strings.TrimSpace(resp.Lease.ID),
-		RequestID: req.RequestID,
+		AccountID:  accountID,
+		LeaseID:    strings.TrimSpace(resp.Lease.ID),
+		RequestID:  req.RequestID,
+		LastResort: resp.Reason == "last_resort",
 	}, true, nil
 }
 

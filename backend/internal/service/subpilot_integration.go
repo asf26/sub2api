@@ -41,8 +41,10 @@ func (s *GatewayService) trySubPilotRecommendForGateway(
 			return nil, true, ErrNoAvailableAccounts
 		}
 		if _, excluded := localExcluded[rec.AccountID]; excluded {
-			releaseSubPilotRecommendation(client, rec)
-			return nil, true, ErrNoAvailableAccounts
+			if !rec.LastResort {
+				releaseSubPilotRecommendation(client, rec)
+				return nil, true, ErrNoAvailableAccounts
+			}
 		}
 		accounts, _, listErr := s.listSchedulableAccounts(ctx, groupID, platform, hasForcePlatform)
 		if listErr != nil {
@@ -52,6 +54,9 @@ func (s *GatewayService) trySubPilotRecommendForGateway(
 		account := findSubPilotAccount(accounts, rec.AccountID)
 		if !s.isSubPilotGatewayAccountEligible(ctx, account, requestedModel) {
 			releaseSubPilotRecommendation(client, rec)
+			if rec.LastResort {
+				return nil, true, ErrNoAvailableAccounts
+			}
 			localExcluded[rec.AccountID] = struct{}{}
 			continue
 		}
@@ -62,12 +67,18 @@ func (s *GatewayService) trySubPilotRecommendForGateway(
 		}
 		if result == nil || !result.Acquired {
 			releaseSubPilotRecommendation(client, rec)
+			if rec.LastResort {
+				return nil, true, ErrNoAvailableAccounts
+			}
 			localExcluded[rec.AccountID] = struct{}{}
 			continue
 		}
 		if !s.checkAndRegisterSession(ctx, account, sessionHash) {
 			result.ReleaseFunc()
 			releaseSubPilotRecommendation(client, rec)
+			if rec.LastResort {
+				return nil, true, ErrNoAvailableAccounts
+			}
 			localExcluded[rec.AccountID] = struct{}{}
 			continue
 		}
@@ -127,12 +138,17 @@ func (s *OpenAIGatewayService) trySubPilotRecommendForOpenAI(
 			return nil, true, ErrNoAvailableAccounts
 		}
 		if _, excluded := localExcluded[rec.AccountID]; excluded {
-			releaseSubPilotRecommendation(client, rec)
-			return nil, true, ErrNoAvailableAccounts
+			if !rec.LastResort {
+				releaseSubPilotRecommendation(client, rec)
+				return nil, true, ErrNoAvailableAccounts
+			}
 		}
 		account, ok := s.findSubPilotOpenAIAccount(ctx, rec.AccountID, groupID, platform, requestedModel, requireCompact, requiredCapability, requiredTransport, requiredImageCapability)
 		if !ok {
 			releaseSubPilotRecommendation(client, rec)
+			if rec.LastResort {
+				return nil, true, ErrNoAvailableAccounts
+			}
 			localExcluded[rec.AccountID] = struct{}{}
 			continue
 		}
@@ -143,6 +159,9 @@ func (s *OpenAIGatewayService) trySubPilotRecommendForOpenAI(
 		}
 		if result == nil || !result.Acquired {
 			releaseSubPilotRecommendation(client, rec)
+			if rec.LastResort {
+				return nil, true, ErrNoAvailableAccounts
+			}
 			localExcluded[rec.AccountID] = struct{}{}
 			continue
 		}
