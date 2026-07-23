@@ -68,6 +68,18 @@ func TestSortAccountsByPriorityAndLastUsed_PreferOAuth(t *testing.T) {
 	require.Equal(t, int64(2), accounts[0].ID, "preferOAuth 时 OAuth 账号排前面")
 }
 
+func TestSortAccountsByPriorityAndLastUsed_OAuthDefaultTenFollowsLowerNumericPriorities(t *testing.T) {
+	accounts := []*Account{
+		{ID: 110, Priority: 10, Type: AccountTypeOAuth},
+		{ID: 101, Priority: 1, Type: AccountTypeAPIKey},
+		{ID: 100, Priority: 0, Type: AccountTypeAPIKey},
+	}
+
+	sortAccountsByPriorityAndLastUsed(accounts, true)
+
+	require.Equal(t, []int64{100, 101, 110}, []int64{accounts[0].ID, accounts[1].ID, accounts[2].ID})
+}
+
 func TestSortAccountsByPriorityAndLastUsed_StableSort(t *testing.T) {
 	accounts := []*Account{
 		{ID: 1, Priority: 1, LastUsedAt: nil, Type: AccountTypeAPIKey},

@@ -66,7 +66,7 @@ type DataAccount struct {
 	Extra              map[string]any `json:"extra,omitempty"`
 	ProxyKey           *string        `json:"proxy_key,omitempty"`
 	Concurrency        int            `json:"concurrency"`
-	Priority           int            `json:"priority"`
+	Priority           *int           `json:"priority"`
 	RateMultiplier     *float64       `json:"rate_multiplier,omitempty"`
 	ExpiresAt          *int64         `json:"expires_at,omitempty"`
 	AutoPauseOnExpired *bool          `json:"auto_pause_on_expired,omitempty"`
@@ -199,6 +199,7 @@ func (h *AccountHandler) ExportData(c *gin.Context) {
 			v := acc.ExpiresAt.Unix()
 			expiresAt = &v
 		}
+		priority := acc.Priority
 		dataAccounts = append(dataAccounts, DataAccount{
 			Name:               acc.Name,
 			Notes:              acc.Notes,
@@ -208,7 +209,7 @@ func (h *AccountHandler) ExportData(c *gin.Context) {
 			Extra:              acc.Extra,
 			ProxyKey:           proxyKey,
 			Concurrency:        acc.Concurrency,
-			Priority:           acc.Priority,
+			Priority:           &priority,
 			RateMultiplier:     acc.RateMultiplier,
 			ExpiresAt:          expiresAt,
 			AutoPauseOnExpired: &acc.AutoPauseOnExpired,
@@ -438,7 +439,7 @@ func (h *AccountHandler) importData(ctx context.Context, req DataImportRequest) 
 			Extra:                item.Extra,
 			ProxyID:              proxyID,
 			Concurrency:          item.Concurrency,
-			Priority:             item.Priority,
+			Priority:             resolveNewAccountPriority(item.Type, item.Priority),
 			RateMultiplier:       item.RateMultiplier,
 			GroupIDs:             nil,
 			ExpiresAt:            item.ExpiresAt,
@@ -699,7 +700,7 @@ func validateDataAccount(item DataAccount) error {
 	if item.Concurrency < 0 {
 		return errors.New("concurrency must be >= 0")
 	}
-	if item.Priority < 0 {
+	if item.Priority != nil && *item.Priority < 0 {
 		return errors.New("priority must be >= 0")
 	}
 	return nil

@@ -2,6 +2,8 @@ package handler
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"log/slog"
 	"strings"
 	"sync"
@@ -224,10 +226,12 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Turnstile 验证
-	if err := h.authService.VerifyTurnstile(c.Request.Context(), req.TurnstileToken, ip.GetClientIP(c)); err != nil {
-		response.ErrorFrom(c, err)
-		return
+	if !h.isSubPilotTrustedRequest(c) {
+		// Turnstile 验证
+		if err := h.authService.VerifyTurnstile(c.Request.Context(), req.TurnstileToken, ip.GetClientIP(c)); err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
 	}
 
 	token, user, err := h.authService.Login(c.Request.Context(), req.Email, req.Password)
@@ -262,6 +266,20 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	h.authService.RecordSuccessfulLogin(c.Request.Context(), user.ID)
 
 	h.respondWithTokenPair(c, user)
+}
+
+func (h *AuthHandler) isSubPilotTrustedRequest(c *gin.Context) bool {
+	if h == nil || h.cfg == nil || c == nil {
+		return false
+	}
+	expected := strings.TrimSpace(h.cfg.Gateway.SubPilot.SharedSecret)
+	got := strings.TrimSpace(c.GetHeader("X-SubPilot-Secret"))
+	if expected == "" || got == "" {
+		return false
+	}
+	expectedHash := sha256.Sum256([]byte(expected))
+	gotHash := sha256.Sum256([]byte(got))
+	return subtle.ConstantTimeCompare(expectedHash[:], gotHash[:]) == 1
 }
 
 // TotpLoginResponse represents the response when 2FA is required

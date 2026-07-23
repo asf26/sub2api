@@ -69,6 +69,60 @@ func TestUpdateServicePerformUpdateNoUpdateReturnsSentinel(t *testing.T) {
 	require.ErrorIs(t, err, ErrNoUpdateAvailable)
 }
 
+func TestUpdateServicePerformUpdateDisabledReturnsSentinel(t *testing.T) {
+	t.Setenv(binaryUpdateDisabledEnv, "true")
+
+	svc := NewUpdateService(
+		&updateServiceCacheStub{},
+		&updateServiceGitHubClientStub{},
+		"0.1.132",
+		"release",
+	)
+
+	err := svc.PerformUpdate(context.Background())
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrBinaryUpdateDisabled)
+}
+
+func TestUpdateServiceRollbackToVersionDisabledReturnsSentinel(t *testing.T) {
+	t.Setenv(binaryUpdateDisabledEnv, "true")
+
+	svc := NewUpdateService(
+		&updateServiceCacheStub{},
+		&updateServiceGitHubClientStub{},
+		"0.1.132",
+		"release",
+	)
+
+	err := svc.RollbackToVersion(context.Background(), "0.1.131")
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrBinaryUpdateDisabled)
+}
+
+func TestUpdateServiceCheckUpdateDisabledReportsSourceBuild(t *testing.T) {
+	t.Setenv(binaryUpdateDisabledEnv, "true")
+
+	svc := NewUpdateService(
+		&updateServiceCacheStub{},
+		&updateServiceGitHubClientStub{
+			release: &GitHubRelease{
+				TagName: "v0.1.133",
+				Name:    "v0.1.133",
+			},
+		},
+		"0.1.132",
+		"release",
+	)
+
+	info, err := svc.CheckUpdate(context.Background(), true)
+
+	require.NoError(t, err)
+	require.True(t, info.HasUpdate)
+	require.Equal(t, "source", info.BuildType)
+}
+
 func newRollbackTestService(current string, releases []*GitHubRelease) *UpdateService {
 	return NewUpdateService(
 		&updateServiceCacheStub{},

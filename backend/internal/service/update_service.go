@@ -25,6 +25,7 @@ import (
 var (
 	ErrNoUpdateAvailable         = infraerrors.Conflict("ALREADY_UP_TO_DATE", "no update available; current version is latest")
 	ErrRollbackVersionNotAllowed = infraerrors.BadRequest("ROLLBACK_VERSION_NOT_ALLOWED", "version is not in the allowed rollback list")
+	ErrBinaryUpdateDisabled      = infraerrors.Conflict("BINARY_UPDATE_DISABLED", "binary update disabled; merge upstream source changes and rebuild")
 )
 
 const (
@@ -43,6 +44,8 @@ const (
 	maxRollbackVersions = 3
 	// Fetch a few extra releases so filtering (current/newer/prerelease) still leaves enough candidates
 	rollbackFetchPageSize = 15
+
+	binaryUpdateDisabledEnv = "SUB2API_DISABLE_BINARY_UPDATE"
 )
 
 // UpdateCache defines cache operations for update service
@@ -151,7 +154,7 @@ func (s *UpdateService) CheckUpdate(ctx context.Context, force bool) (*UpdateInf
 			LatestVersion:  s.currentVersion,
 			HasUpdate:      false,
 			Warning:        err.Error(),
-			BuildType:      s.buildType,
+			BuildType:      s.effectiveBuildType(),
 		}, nil
 	}
 
@@ -163,6 +166,10 @@ func (s *UpdateService) CheckUpdate(ctx context.Context, force bool) (*UpdateInf
 // PerformUpdate downloads and applies the update
 // Uses atomic file replacement pattern for safe in-place updates
 func (s *UpdateService) PerformUpdate(ctx context.Context) error {
+	if s.binaryUpdateDisabled() {
+		return ErrBinaryUpdateDisabled
+	}
+
 	info, err := s.CheckUpdate(ctx, true)
 	if err != nil {
 		return err
@@ -327,6 +334,10 @@ func (s *UpdateService) ListRollbackVersions(ctx context.Context) ([]RollbackVer
 // The target must be one of the versions returned by ListRollbackVersions;
 // anything else (including the current version) is rejected.
 func (s *UpdateService) RollbackToVersion(ctx context.Context, version string) error {
+	if s.binaryUpdateDisabled() {
+		return ErrBinaryUpdateDisabled
+	}
+
 	target := strings.TrimPrefix(strings.TrimSpace(version), "v")
 	if target == "" {
 		return ErrRollbackVersionNotAllowed
@@ -428,7 +439,7 @@ func (s *UpdateService) fetchLatestRelease(ctx context.Context) (*UpdateInfo, er
 			Assets:      assets,
 		},
 		Cached:    false,
-		BuildType: s.buildType,
+		BuildType: s.effectiveBuildType(),
 	}, nil
 }
 
@@ -618,8 +629,24 @@ func (s *UpdateService) getFromCache(ctx context.Context) (*UpdateInfo, error) {
 		HasUpdate:      compareVersions(s.currentVersion, cached.Latest) < 0,
 		ReleaseInfo:    cached.ReleaseInfo,
 		Cached:         true,
-		BuildType:      s.buildType,
+		BuildType:      s.effectiveBuildType(),
 	}, nil
+}
+
+func (s *UpdateService) binaryUpdateDisabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(binaryUpdateDisabledEnv))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *UpdateService) effectiveBuildType() string {
+	if s.binaryUpdateDisabled() {
+		return "source"
+	}
+	return s.buildType
 }
 
 func (s *UpdateService) saveToCache(ctx context.Context, info *UpdateInfo) {

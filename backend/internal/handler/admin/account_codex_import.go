@@ -176,10 +176,7 @@ func (h *AccountHandler) importCodexSessions(ctx context.Context, req CodexSessi
 	if req.Concurrency != nil {
 		concurrency = *req.Concurrency
 	}
-	priority := 50
-	if req.Priority != nil {
-		priority = *req.Priority
-	}
+	priority := resolveNewAccountPriority(service.AccountTypeOAuth, req.Priority)
 	credentialExtras := sanitizeCodexImportCredentialExtras(req.CredentialExtras)
 	skipDefaultGroupBind := false
 	if req.SkipDefaultGroupBind != nil {
