@@ -269,6 +269,13 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 				}
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
+					if failoverClientGone(c) {
+						reqLog.Info("openai.images.failover_aborted_client_disconnected",
+							zap.Int64("account_id", account.ID),
+							zap.Int("upstream_status", failoverErr.StatusCode),
+						)
+						return
+					}
 					h.gatewayService.ReportOpenAIAccountScheduleResultWithContext(c.Request.Context(), account.ID, account.GetMappedModel(requestModel), false, nil)
 					if service.OpenAIImagesJSONKeepaliveAdjustedWrittenSize(c) != writerSizeBeforeForward {
 						reqLog.Warn("openai.images.upstream_failover_skipped_after_flush",
@@ -276,13 +283,6 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 							zap.Int("upstream_status", failoverErr.StatusCode),
 						)
 						h.handleFailoverExhausted(c, failoverErr, true)
-						return
-					}
-					if failoverClientGone(c) {
-						reqLog.Info("openai.images.failover_aborted_client_disconnected",
-							zap.Int64("account_id", account.ID),
-							zap.Int("upstream_status", failoverErr.StatusCode),
-						)
 						return
 					}
 					if failoverErr.RetryableOnSameAccount {
@@ -322,6 +322,13 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 						zap.Int("max_switches", maxAccountSwitches),
 					)
 					continue
+				}
+				if failoverClientGone(c) {
+					reqLog.Info("openai.images.forward_aborted_client_disconnected",
+						zap.Int64("account_id", account.ID),
+						zap.Error(err),
+					)
+					return
 				}
 				h.gatewayService.ReportOpenAIAccountScheduleResultWithContext(c.Request.Context(), account.ID, account.GetMappedModel(requestModel), false, nil)
 				upstreamErrorAlreadyCommunicated := openAIForwardErrorAlreadyCommunicated(c, writerSizeBeforeForward, err)

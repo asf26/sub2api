@@ -205,7 +205,7 @@ func (s *OpenAIGatewayService) trySubPilotRecommendForOpenAI(
 			releaseSubPilotRecommendation(client, rec)
 			return nil, true, selectionErr
 		}
-		if sessionHash != "" {
+		if !rec.LastResort && sessionHash != "" {
 			_ = s.refreshStickySessionTTL(ctx, groupID, sessionHash, openaiStickySessionTTL)
 		}
 		rememberSubPilotLease(rec.RequestID, account.ID, rec.LeaseID)

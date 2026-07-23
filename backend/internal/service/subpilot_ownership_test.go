@@ -19,6 +19,22 @@ type subPilotSoftCooldownAccountRepo struct {
 	account *Account
 }
 
+type subPilotStickyTrackingCache struct {
+	schedulerTestGatewayCache
+	setCalls     int
+	refreshCalls int
+}
+
+func (c *subPilotStickyTrackingCache) SetSessionAccountID(ctx context.Context, groupID int64, sessionHash string, accountID int64, ttl time.Duration) error {
+	c.setCalls++
+	return c.schedulerTestGatewayCache.SetSessionAccountID(ctx, groupID, sessionHash, accountID, ttl)
+}
+
+func (c *subPilotStickyTrackingCache) RefreshSessionTTL(ctx context.Context, groupID int64, sessionHash string, ttl time.Duration) error {
+	c.refreshCalls++
+	return c.schedulerTestGatewayCache.RefreshSessionTTL(ctx, groupID, sessionHash, ttl)
+}
+
 func (r subPilotSoftCooldownAccountRepo) GetByID(_ context.Context, id int64) (*Account, error) {
 	if r.account != nil && r.account.ID == id {
 		return r.account, nil
@@ -269,19 +285,21 @@ func TestOpenAIGatewayService_SubPilotReceivesFailedAccountExclusions(t *testing
 	cfg := &config.Config{}
 	cfg.Gateway.Scheduling.LoadBatchEnabled = false
 	cfg.Gateway.SubPilot = config.SubPilotConfig{Enabled: true, BaseURL: server.URL, TimeoutMS: 200, FailOpen: true}
+	cache := &subPilotStickyTrackingCache{}
 	svc := &OpenAIGatewayService{
 		accountRepo:        schedulerTestOpenAIAccountRepo{accounts: accounts},
-		cache:              &schedulerTestGatewayCache{},
+		cache:              cache,
 		cfg:                cfg,
 		concurrencyService: NewConcurrencyService(schedulerTestConcurrencyCache{}),
 	}
 
 	selection, _, err := svc.SelectAccountWithScheduler(
-		context.Background(), &groupID, "", "", "gpt-5.4",
+		context.Background(), &groupID, "", "openai-normal-session", "gpt-5.4",
 		map[int64]struct{}{37111: {}}, OpenAIUpstreamTransportAny, false,
 	)
 	require.NoError(t, err)
 	require.Equal(t, int64(37112), selection.Account.ID)
+	require.Greater(t, cache.refreshCalls, 0)
 
 	select {
 	case req := <-requests:
@@ -320,20 +338,23 @@ func TestOpenAIGatewayService_SubPilotAcceptsExplicitLastResortExcludedAccount(t
 	cfg := &config.Config{}
 	cfg.Gateway.Scheduling.LoadBatchEnabled = false
 	cfg.Gateway.SubPilot = config.SubPilotConfig{Enabled: true, BaseURL: server.URL, TimeoutMS: 200, FailOpen: true}
+	cache := &subPilotStickyTrackingCache{}
 	svc := &OpenAIGatewayService{
 		accountRepo:        schedulerTestOpenAIAccountRepo{accounts: accounts},
-		cache:              &schedulerTestGatewayCache{},
+		cache:              cache,
 		cfg:                cfg,
 		concurrencyService: NewConcurrencyService(schedulerTestConcurrencyCache{}),
 	}
 
 	selection, decision, err := svc.SelectAccountWithScheduler(
-		context.Background(), &groupID, "", "", "gpt-5.4",
+		context.Background(), &groupID, "", "openai-last-resort-session", "gpt-5.4",
 		map[int64]struct{}{37131: {}}, OpenAIUpstreamTransportAny, false,
 	)
 	require.NoError(t, err)
 	require.Equal(t, int64(37131), selection.Account.ID)
 	require.Equal(t, "subpilot", decision.Layer)
+	require.Zero(t, cache.setCalls)
+	require.Zero(t, cache.refreshCalls)
 }
 
 func TestGatewaySubPilotAcceptsExplicitLastResortExcludedAccount(t *testing.T) {
@@ -362,18 +383,22 @@ func TestGatewaySubPilotAcceptsExplicitLastResortExcludedAccount(t *testing.T) {
 	}
 	cfg := &config.Config{}
 	cfg.Gateway.SubPilot = config.SubPilotConfig{Enabled: true, BaseURL: server.URL, TimeoutMS: 200, FailOpen: true}
+	cache := &subPilotStickyTrackingCache{}
 	svc := &GatewayService{
 		accountRepo: schedulerTestOpenAIAccountRepo{accounts: []Account{account}},
+		cache:       cache,
 		cfg:         cfg,
 	}
 
 	selection, handled, err := svc.trySubPilotRecommendForGateway(
-		context.Background(), &groupID, "", "claude-opus-4-6",
+		context.Background(), &groupID, "gateway-last-resort-session", "claude-opus-4-6",
 		map[int64]struct{}{account.ID: {}}, PlatformAnthropic, true,
 	)
 	require.NoError(t, err)
 	require.True(t, handled)
 	require.Equal(t, account.ID, selection.Account.ID)
+	require.Zero(t, cache.setCalls)
+	require.Zero(t, cache.refreshCalls)
 }
 
 func TestGatewaySubPilotLastResortReloadsSoftCooldownAccount(t *testing.T) {

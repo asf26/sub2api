@@ -241,7 +241,7 @@ func (h *OpenAIOAuthHandler) CreateAccountFromOAuth(c *gin.Context) {
 		ProxyID     *int64  `json:"proxy_id"`
 		Name        string  `json:"name"`
 		Concurrency int     `json:"concurrency"`
-		Priority    int     `json:"priority"`
+		Priority    *int    `json:"priority"`
 		GroupIDs    []int64 `json:"group_ids"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -285,7 +285,7 @@ func (h *OpenAIOAuthHandler) CreateAccountFromOAuth(c *gin.Context) {
 		Extra:       nil,
 		ProxyID:     req.ProxyID,
 		Concurrency: req.Concurrency,
-		Priority:    req.Priority,
+		Priority:    resolveNewAccountPriority(service.AccountTypeOAuth, req.Priority),
 		GroupIDs:    req.GroupIDs,
 	})
 	if err != nil {
@@ -358,10 +358,7 @@ func (h *OpenAIOAuthHandler) CreateAccountFromCodexPAT(c *gin.Context) {
 	if req.Concurrency != nil {
 		concurrency = *req.Concurrency
 	}
-	priority := 50
-	if req.Priority != nil {
-		priority = *req.Priority
-	}
+	priority := resolveNewAccountPriority(service.AccountTypeOAuth, req.Priority)
 	skipDefaultGroupBind := false
 	if req.SkipDefaultGroupBind != nil {
 		skipDefaultGroupBind = *req.SkipDefaultGroupBind

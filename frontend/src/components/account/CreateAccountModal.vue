@@ -2733,9 +2733,10 @@
           <input
             v-model.number="form.priority"
             type="number"
-            min="1"
+            min="0"
             class="input"
             data-tour="account-form-priority"
+            @input="priorityManuallyEdited = true"
           />
           <p class="input-hint">{{ t('admin.accounts.priorityHint') }}</p>
         </div>
@@ -3684,6 +3685,7 @@ const step = ref(1)
 const submitting = ref(false)
 const accountCategory = ref<'oauth-based' | 'apikey' | 'bedrock' | 'service_account'>('oauth-based') // UI selection for account category
 const addMethod = ref<AddMethod>('oauth') // For oauth-based: 'oauth' or 'setup-token'
+const priorityManuallyEdited = ref(false)
 const apiKeyBaseUrl = ref('https://api.anthropic.com')
 const apiKeyValue = ref('')
 const upstreamBillingAutoProbeEnabled = ref(true)
@@ -4065,7 +4067,7 @@ const form = reactive({
   proxy_id: null as number | null,
   concurrency: 10,
   load_factor: null as number | null,
-  priority: 1,
+  priority: 10,
   rate_multiplier: 1,
   group_ids: [] as number[],
   expires_at: null as number | null
@@ -4147,23 +4149,25 @@ watch(
 watch(
   [accountCategory, addMethod, antigravityAccountType, () => form.platform],
   ([category, method, agType]) => {
+    let nextType: AccountType
     // Antigravity upstream 类型（实际创建为 apikey）
     if (form.platform === 'antigravity' && agType === 'upstream') {
-      form.type = 'apikey'
-      return
-    }
-    // Bedrock 类型
-    if (form.platform === 'anthropic' && category === 'bedrock') {
-      form.type = 'bedrock' as AccountType
-      return
-    }
-    if ((form.platform === 'gemini' || form.platform === 'anthropic') && category === 'service_account') {
-      form.type = 'service_account' as AccountType
+      nextType = 'apikey'
+    } else if (form.platform === 'anthropic' && category === 'bedrock') {
+      nextType = 'bedrock' as AccountType
+    } else if ((form.platform === 'gemini' || form.platform === 'anthropic') && category === 'service_account') {
+      nextType = 'service_account' as AccountType
     } else if (category === 'oauth-based') {
-      form.type = form.platform === 'anthropic' ? method as AccountType : 'oauth'
+      nextType = form.platform === 'anthropic' ? method as AccountType : 'oauth'
     } else {
-      form.type = 'apikey'
+      nextType = 'apikey'
     }
+
+    const nextAutomaticPriority = nextType === 'oauth' || nextType === 'setup-token' ? 10 : 1
+    if (!priorityManuallyEdited.value) {
+      form.priority = nextAutomaticPriority
+    }
+    form.type = nextType
   },
   { immediate: true }
 )
@@ -4615,7 +4619,8 @@ const resetForm = () => {
   form.proxy_id = null
   form.concurrency = 10
   form.load_factor = null
-  form.priority = 1
+  priorityManuallyEdited.value = false
+  form.priority = 10
   form.rate_multiplier = 1
   form.group_ids = []
   form.expires_at = null

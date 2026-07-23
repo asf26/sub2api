@@ -426,6 +426,33 @@ func TestBatchImagePublicService_Submit(t *testing.T) {
 	})
 }
 
+func TestBatchImagePublicService_SelectProviderAndAccountUsesLowestPriority(t *testing.T) {
+	accounts := []Account{
+		testBatchImageAccount(110, AccountTypeAPIKey),
+		testBatchImageAccount(101, AccountTypeAPIKey),
+		testBatchImageAccount(100, AccountTypeAPIKey),
+	}
+	accounts[0].Priority = 10
+	accounts[1].Priority = 1
+	accounts[2].Priority = 0
+	provider := &publicBatchImageProvider{name: BatchImageProviderGeminiAPI}
+	svc := &BatchImagePublicService{
+		AccountRepo:      &publicBatchImageAccountRepo{accounts: accounts},
+		ProviderRegistry: NewBatchImageProviderRegistry(provider),
+	}
+
+	selectedProvider, account, err := svc.selectProviderAndAccount(
+		context.Background(),
+		testBatchImageOwner(),
+		BatchImageProviderGeminiAPI,
+		"gemini-2.5-flash-image",
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, BatchImageProviderGeminiAPI, selectedProvider.Name())
+	require.Equal(t, int64(100), account.ID)
+}
+
 func TestBatchImagePublicService_List(t *testing.T) {
 	ctx := context.Background()
 	svc, repo, _, _, _ := newTestBatchImagePublicService(true)
@@ -714,9 +741,12 @@ func newTestBatchImagePublicService(enabled bool) (*BatchImagePublicService, *fa
 	queue := &publicBatchImageQueue{}
 	gemini := &publicBatchImageProvider{name: BatchImageProviderGeminiAPI}
 	vertex := &publicBatchImageProvider{name: BatchImageProviderVertex}
+	accounts := []Account{testBatchImageAccount(101, AccountTypeAPIKey), testBatchImageAccount(202, AccountTypeServiceAccount)}
+	accounts[0].Priority = 20
+	accounts[1].Priority = 10
 	svc := &BatchImagePublicService{
 		Repo:        repo,
-		AccountRepo: &publicBatchImageAccountRepo{accounts: []Account{testBatchImageAccount(101, AccountTypeAPIKey), testBatchImageAccount(202, AccountTypeServiceAccount)}},
+		AccountRepo: &publicBatchImageAccountRepo{accounts: accounts},
 		Queue:       queue,
 		ProviderRegistry: NewBatchImageProviderRegistry(
 			gemini,

@@ -129,6 +129,7 @@ func TestExportDataIncludesSecrets(t *testing.T) {
 	require.Equal(t, "pass", resp.Data.Proxies[0].Password)
 	require.Len(t, resp.Data.Accounts, 1)
 	require.Equal(t, "secret", resp.Data.Accounts[0].Credentials["token"])
+	require.Equal(t, 50, resp.Data.Accounts[0].Priority)
 }
 
 func TestExportDataWithoutProxies(t *testing.T) {
@@ -316,4 +317,57 @@ func TestImportDataReusesProxyAndSkipsDefaultGroup(t *testing.T) {
 	require.Len(t, adminSvc.createdProxies, 0)
 	require.Len(t, adminSvc.createdAccounts, 1)
 	require.True(t, adminSvc.createdAccounts[0].SkipDefaultGroupBind)
+}
+
+func TestImportDataPriorityDefaultAndExplicitZero(t *testing.T) {
+	zero := 0
+	seven := 7
+	tests := []struct {
+		name        string
+		accountType string
+		priority    *int
+		want        int
+	}{
+		{name: "OAuth omitted", accountType: service.AccountTypeOAuth, want: defaultOAuthAccountPriority},
+		{name: "OAuth explicit zero", accountType: service.AccountTypeOAuth, priority: &zero, want: 0},
+		{name: "setup token omitted", accountType: service.AccountTypeSetupToken, want: defaultOAuthAccountPriority},
+		{name: "setup token explicit zero", accountType: service.AccountTypeSetupToken, priority: &zero, want: 0},
+		{name: "OAuth explicit nonzero", accountType: service.AccountTypeOAuth, priority: &seven, want: 7},
+		{name: "API key omitted", accountType: service.AccountTypeAPIKey, want: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router, adminSvc := setupAccountDataRouter()
+			account := map[string]any{
+				"name":        "imported-account",
+				"platform":    service.PlatformOpenAI,
+				"type":        tt.accountType,
+				"credentials": map[string]any{"token": "secret"},
+				"concurrency": 1,
+			}
+			if tt.priority != nil {
+				account["priority"] = *tt.priority
+			}
+			payload := map[string]any{
+				"data": map[string]any{
+					"type":     dataType,
+					"version":  dataVersion,
+					"proxies":  []map[string]any{},
+					"accounts": []map[string]any{account},
+				},
+			}
+
+			body, err := json.Marshal(payload)
+			require.NoError(t, err)
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/data", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			router.ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+			require.Len(t, adminSvc.createdAccounts, 1)
+			require.Equal(t, tt.want, adminSvc.createdAccounts[0].Priority)
+		})
+	}
 }

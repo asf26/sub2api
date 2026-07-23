@@ -292,3 +292,27 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     expect(createOpenAICodexPATMock.mock.calls[0]?.[0]?.extra?.openai_long_context_billing_enabled).toBe(false)
   })
 })
+
+describe('CreateAccountModal priority defaults', () => {
+  it('allows zero and preserves a manually entered value when the account type changes', async () => {
+    const wrapper = mountModal()
+    const priority = wrapper.get<HTMLInputElement>('[data-tour="account-form-priority"]')
+
+    expect(priority.attributes('min')).toBe('0')
+    expect(priority.element.value).toBe('10')
+
+    await priority.setValue('0')
+    await selectButtonByText(wrapper, 'admin.accounts.claudeConsole')
+
+    expect(priority.element.value).toBe('0')
+  })
+
+  it('applies the API key default while the priority is untouched', async () => {
+    const wrapper = mountModal()
+    const priority = wrapper.get<HTMLInputElement>('[data-tour="account-form-priority"]')
+
+    await selectButtonByText(wrapper, 'admin.accounts.claudeConsole')
+
+    expect(priority.element.value).toBe('1')
+  })
+})
