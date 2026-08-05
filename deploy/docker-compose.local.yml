@@ -27,6 +27,8 @@ services:
     image: ${SUB2API_IMAGE:-ghcr.io/asf26/sub2api:0.1.155-subpilot.1}
     container_name: sub2api
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     ulimits:
       nofile:
         soft: 100000
