@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
+	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
@@ -514,6 +515,30 @@ func buildAccountForCreate(input *CreateAccountInput, accountExtra map[string]an
 	return account, nil
 }
 
+func validateXiaoAPIAccount(account *Account) error {
+	if account == nil || account.Platform != PlatformXiaoAPI {
+		return nil
+	}
+	if account.Type != AccountTypeAPIKey {
+		return infraerrors.BadRequest("XIAOAPI_ACCOUNT_TYPE_INVALID", "xiaoapi accounts only support apikey authentication")
+	}
+	if account.Credentials == nil {
+		return infraerrors.BadRequest("XIAOAPI_CREDENTIALS_REQUIRED", "xiaoapi credentials are required")
+	}
+	if strings.TrimSpace(account.GetCredential("api_key")) == "" {
+		return infraerrors.BadRequest("XIAOAPI_API_KEY_REQUIRED", "xiaoapi api_key is required")
+	}
+	rawBaseURL := strings.TrimSpace(account.GetCredential("base_url"))
+	baseURL, err := url.Parse(rawBaseURL)
+	if err != nil || baseURL.Host == "" || (baseURL.Scheme != "http" && baseURL.Scheme != "https") || baseURL.RawQuery != "" || baseURL.Fragment != "" {
+		return infraerrors.BadRequest("XIAOAPI_BASE_URL_INVALID", "xiaoapi base_url must be an absolute HTTP(S) URL without query or fragment")
+	}
+	if _, err := account.XiaoVideoPricingRules(); err != nil {
+		return infraerrors.Newf(http.StatusBadRequest, "XIAOAPI_VIDEO_PRICING_INVALID", "%v", err)
+	}
+	return nil
+}
+
 func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccountInput) (*Account, error) {
 	accountExtra, err := normalizeOpenAILongContextBillingExtra(input.Platform, input.Extra)
 	if err != nil {
@@ -554,6 +579,9 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 
 	account, err := buildAccountForCreate(input, accountExtra)
 	if err != nil {
+		return nil, err
+	}
+	if err := validateXiaoAPIAccount(account); err != nil {
 		return nil, err
 	}
 	if err := s.accountRepo.Create(ctx, account); err != nil {
@@ -823,6 +851,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	}
 	if input.AutoPauseOnExpired != nil {
 		account.AutoPauseOnExpired = *input.AutoPauseOnExpired
+	}
+	if err := validateXiaoAPIAccount(account); err != nil {
+		return nil, err
 	}
 
 	// 先验证分组是否存在（在任何写操作之前）

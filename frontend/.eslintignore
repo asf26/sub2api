@@ -8,6 +8,8 @@ node_modules/
 # 忽略构建输出
 dist/
 ../backend/internal/web/dist/
+public/image-playground/
+embedded/gpt-image-playground/
 
 # 忽略缓存
 .cache/

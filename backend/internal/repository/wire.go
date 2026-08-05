@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 
 	entsql "entgo.io/ent/dialect/sql"
 	"github.com/Wei-Shaw/sub2api/ent"
@@ -82,6 +83,7 @@ var ProviderSet = wire.NewSet(
 	NewUsageLogRepository,
 	NewUsageBillingRepository,
 	NewBatchImageRepository,
+	NewVideoRepository,
 	NewIdempotencyRepository,
 	NewUsageCleanupRepository,
 	NewDashboardAggregationRepository,
@@ -180,13 +182,27 @@ func ProvideEnt(cfg *config.Config) (*ent.Client, error) {
 	return client, err
 }
 
-// ProvideImageStorageFactory 提供按需构造对象存储客户端的工厂。
+// ProvideImageStorageFactory builds S3 storage when it is enabled and complete,
+// otherwise it returns persistent server-local storage.
 //
 // 这里返回工厂而不是实例：异步生图的开关与凭证可以在后台随时改动，客户端必须能在
 // 设置保存后重建，而不是在启动时定死一份。
-func ProvideImageStorageFactory() service.ImageStorageFactory {
+func ProvideImageStorageFactory(appConfig *config.Config) service.ImageStorageFactory {
 	return func(ctx context.Context, cfg *config.ImageStorageConfig) (service.ImageStorage, error) {
-		return NewS3ImageStorage(ctx, cfg)
+		if cfg != nil && cfg.Enabled && cfg.IsConfigured() {
+			return NewS3ImageStorage(ctx, cfg)
+		}
+
+		local := config.ImageStorageConfig{}
+		if appConfig != nil {
+			local = appConfig.ImageStorage
+		}
+		return NewLocalImageStorage(
+			local.LocalDirectory,
+			local.LocalBaseURL,
+			time.Duration(local.LocalRetention)*time.Hour,
+			time.Duration(local.LocalCleanup)*time.Minute,
+		)
 	}
 }
 

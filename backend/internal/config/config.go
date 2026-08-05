@@ -98,6 +98,7 @@ type Config struct {
 	Update                  UpdateConfig                  `mapstructure:"update"`
 	Idempotency             IdempotencyConfig             `mapstructure:"idempotency"`
 	BatchImage              BatchImageConfig              `mapstructure:"batch_image"`
+	VideoAPI                VideoAPIConfig                `mapstructure:"video_api"`
 	ImageStorage            ImageStorageConfig            `mapstructure:"image_storage"`
 }
 
@@ -231,9 +232,29 @@ type BatchImageConfig struct {
 	VertexGCSBaseURL             string `mapstructure:"vertex_gcs_base_url"`
 }
 
-// ImageStorageConfig 配置异步图片任务结果上传的 S3 兼容对象存储。
-// Enabled 同时作为异步图片任务功能的总开关：未启用或未配置完整凭证时，
-// 异步生图接口整体禁用，避免把上游返回的大 base64 结果塞进 Redis。
+// VideoAPIConfig exposes the XiaoAPI-compatible asynchronous video API.
+// Provider credentials and prices remain on the xiaoapi accounts selected per request.
+type VideoAPIConfig struct {
+	Enabled                  bool   `mapstructure:"enabled"`
+	PublicBaseURL            string `mapstructure:"public_base_url"`
+	RequestTimeoutSeconds    int    `mapstructure:"request_timeout_seconds"`
+	ReconcileIntervalSeconds int    `mapstructure:"reconcile_interval_seconds"`
+	ReconcileBatchSize       int    `mapstructure:"reconcile_batch_size"`
+}
+
+func (c VideoAPIConfig) Active() bool {
+	if !c.Enabled {
+		return false
+	}
+	publicURL, err := url.Parse(strings.TrimSpace(c.PublicBaseURL))
+	return err == nil &&
+		(publicURL.Scheme == "http" || publicURL.Scheme == "https") &&
+		publicURL.Host != "" && publicURL.RawQuery == "" && publicURL.Fragment == ""
+}
+
+// ImageStorageConfig configures persistent storage for asynchronous image results.
+// Enabled only selects S3. When it is false or the S3 credentials are incomplete,
+// results are stored in the server-local persistent directory instead.
 type ImageStorageConfig struct {
 	Enabled         bool   `mapstructure:"enabled"`
 	Endpoint        string `mapstructure:"endpoint"` // e.g. https://<account_id>.r2.cloudflarestorage.com
@@ -246,6 +267,10 @@ type ImageStorageConfig struct {
 	PublicBaseURL   string `mapstructure:"public_base_url"`      // 配了则返回 public_base_url/key 直链；否则 presigned
 	PresignExpiry   int    `mapstructure:"presign_expiry_hours"` // public_base_url 为空时的 presigned 过期时长(小时)
 	MaxDownloadByte int64  `mapstructure:"max_download_bytes"`   // 下载上游 url 图片的字节上限
+	LocalDirectory  string `mapstructure:"local_directory"`
+	LocalBaseURL    string `mapstructure:"local_base_url"`
+	LocalRetention  int    `mapstructure:"local_retention_hours"`
+	LocalCleanup    int    `mapstructure:"local_cleanup_interval_minutes"`
 }
 
 // IsConfigured 检查对象存储必要字段是否已配置
@@ -253,7 +278,7 @@ func (c *ImageStorageConfig) IsConfigured() bool {
 	return c.Bucket != "" && c.AccessKeyID != "" && c.SecretAccessKey != ""
 }
 
-// Active 返回异步图片任务是否可用：开关打开且凭证齐全
+// Active reports whether the optional S3 backend is available.
 func (c *ImageStorageConfig) Active() bool {
 	return c.Enabled && c.IsConfigured()
 }
@@ -1796,6 +1821,7 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 	if cfg.Gateway.SubPilot.SharedSecret == "" {
 		cfg.Gateway.SubPilot.SharedSecret = strings.TrimSpace(os.Getenv("SUB2API_PROBE_SECRET"))
 	}
+	cfg.VideoAPI.PublicBaseURL = strings.TrimRight(strings.TrimSpace(cfg.VideoAPI.PublicBaseURL), "/")
 
 	// 兼容旧键 gateway.disable_codex_originator_normalization：语义已被
 	// disable_codex_identity_enforcement 取代（身份改写升级为强制统一出口），
@@ -2122,6 +2148,13 @@ func setDefaults() {
 	viper.SetDefault("batch_image.vertex_batch_prediction_base_url", "")
 	viper.SetDefault("batch_image.vertex_gcs_base_url", "")
 
+	// XiaoAPI-compatible video API. Provider credentials live on xiaoapi accounts.
+	viper.SetDefault("video_api.enabled", false)
+	viper.SetDefault("video_api.public_base_url", "")
+	viper.SetDefault("video_api.request_timeout_seconds", 30)
+	viper.SetDefault("video_api.reconcile_interval_seconds", 30)
+	viper.SetDefault("video_api.reconcile_batch_size", 20)
+
 	// Image storage (async image task result offload to S3-compatible object storage)
 	viper.SetDefault("image_storage.enabled", false)
 	viper.SetDefault("image_storage.region", "auto")
@@ -2129,6 +2162,10 @@ func setDefaults() {
 	viper.SetDefault("image_storage.force_path_style", false)
 	viper.SetDefault("image_storage.presign_expiry_hours", 24)
 	viper.SetDefault("image_storage.max_download_bytes", 33554432)
+	viper.SetDefault("image_storage.local_directory", "./data/image-storage")
+	viper.SetDefault("image_storage.local_base_url", "/v1/images/files")
+	viper.SetDefault("image_storage.local_retention_hours", 48)
+	viper.SetDefault("image_storage.local_cleanup_interval_minutes", 60)
 	// Registered with empty defaults so AutomaticEnv can reach them: viper only
 	// decodes keys present in AllKeys(), so a credential that is supplied purely
 	// via IMAGE_STORAGE_* and never appears in config.yaml would be dropped and

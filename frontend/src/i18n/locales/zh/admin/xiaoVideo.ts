@@ -1,0 +1,50 @@
+export default {
+  xiaoVideo: {
+    title: 'XiaoAPI 视频',
+    description: '管理视频上游、模型映射和对外销售价格',
+    upstreams: '视频上游',
+    upstreamCount: '共 {count} 个',
+    addUpstream: '添加视频上游',
+    newUpstream: '新建视频上游',
+    empty: '暂无视频上游',
+    upstreamSettings: '上游配置',
+    modelsAndPricing: '模型映射与销售价格',
+    name: '上游名称',
+    baseUrl: '上游 Base URL',
+    apiKey: '上游 API Key',
+    apiKeyUnchanged: '留空则保留现有 API Key',
+    status: '状态',
+    errorStatus: '异常',
+    concurrency: '并发数',
+    concurrencyValue: '并发 {count}',
+    notes: '备注',
+    groups: '绑定的 XiaoAPI 分组',
+    manageGroups: '管理分组',
+    noGroups: '暂无 XiaoAPI 分组',
+    testConnection: '测试连接',
+    testing: '测试中',
+    created: '视频上游已创建',
+    updated: '视频上游已保存',
+    deleted: '视频上游已删除',
+    loadFailed: '加载 XiaoAPI 视频配置失败',
+    saveFailed: '保存 XiaoAPI 视频配置失败',
+    deleteFailed: '删除 XiaoAPI 视频上游失败',
+    testSucceeded: '上游连接正常',
+    testFailed: '上游连接测试失败',
+    invalidPlatform: '该账号不是 XiaoAPI 视频上游',
+    discardChanges: '当前修改尚未保存，确定放弃吗？',
+    deleteConfirm: '确定删除视频上游“{name}”吗？',
+    validation: {
+      nameRequired: '请填写上游名称',
+      baseUrlInvalid: '请填写不含查询参数和锚点的 HTTP(S) Base URL',
+      apiKeyRequired: '请填写上游 API Key',
+      concurrencyInvalid: '并发数必须是 1 到 10000 的整数',
+      mapping: {
+        required: '每条模型映射都必须填写对外模型和上游模型',
+        wildcard: '对外模型的通配符只能在末尾出现一次',
+        targetWildcard: '上游模型不能包含通配符',
+        duplicate: '对外模型不能重复映射'
+      }
+    }
+  }
+}

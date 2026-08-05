@@ -4404,6 +4404,7 @@ const platformOptions = computed(() => [
   { value: "gemini", label: "Gemini" },
   { value: "antigravity", label: "Antigravity" },
   { value: "grok", label: "Grok" },
+  { value: "xiaoapi", label: "XiaoAPI" },
   { value: "composite", label: "Composite" },
 ]);
 
@@ -4414,6 +4415,7 @@ const platformFilterOptions = computed(() => [
   { value: "gemini", label: "Gemini" },
   { value: "antigravity", label: "Antigravity" },
   { value: "grok", label: "Grok" },
+  { value: "xiaoapi", label: "XiaoAPI" },
   { value: "composite", label: "Composite" },
 ]);
 

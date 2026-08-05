@@ -98,7 +98,7 @@ func seedBackupS3(t *testing.T, repo *stubSettingRepo, cfg BackupS3Config) {
 
 // The admin switch must take effect without a restart: that is the entire point
 // of moving image_storage out of config.yaml (#4542).
-func TestImageStorageSettingsToggleTakesEffectWithoutRestart(t *testing.T) {
+func TestImageStorageSettingsToggleSwitchesBetweenLocalAndS3WithoutRestart(t *testing.T) {
 	svc, repo, built := newImageStorageFixture(t, config.ImageStorageConfig{})
 	ctx := context.Background()
 	seedBackupS3(t, repo, BackupS3Config{
@@ -108,8 +108,9 @@ func TestImageStorageSettingsToggleTakesEffectWithoutRestart(t *testing.T) {
 	})
 
 	uploader, enabled := svc.resolve()
-	require.False(t, enabled, "disabled until an admin turns it on")
-	require.Nil(t, uploader)
+	require.True(t, enabled, "local storage keeps async image tasks available while S3 is off")
+	require.NotNil(t, uploader)
+	require.False(t, (*built)[0].Enabled)
 
 	_, err := svc.Update(ctx, ImageStorageSettings{Enabled: true, ReuseBackupS3: true})
 	require.NoError(t, err)
@@ -120,10 +121,13 @@ func TestImageStorageSettingsToggleTakesEffectWithoutRestart(t *testing.T) {
 
 	_, err = svc.Update(ctx, ImageStorageSettings{Enabled: false, ReuseBackupS3: true})
 	require.NoError(t, err)
-	_, enabled = svc.resolve()
-	require.False(t, enabled, "turning it back off must also apply immediately")
+	uploader, enabled = svc.resolve()
+	require.True(t, enabled, "turning S3 off must fall back to local storage immediately")
+	require.NotNil(t, uploader)
 
-	require.Len(t, *built, 1, "the S3 client is built only when the feature is on")
+	require.Len(t, *built, 3, "storage is rebuilt after each saved mode change")
+	require.True(t, (*built)[1].Enabled)
+	require.False(t, (*built)[2].Enabled)
 }
 
 func TestImageStorageSettingsReuseBackupCredentials(t *testing.T) {
@@ -221,7 +225,7 @@ func TestImageStorageSettingsRejectSecretWithEphemeralKey(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestImageStorageSettingsIncompleteStaysDisabled(t *testing.T) {
+func TestImageStorageSettingsIncompleteFallsBackToLocal(t *testing.T) {
 	svc, _, built := newImageStorageFixture(t, config.ImageStorageConfig{})
 	ctx := context.Background()
 
@@ -229,8 +233,27 @@ func TestImageStorageSettingsIncompleteStaysDisabled(t *testing.T) {
 	require.NoError(t, err)
 
 	_, enabled := svc.resolve()
-	require.False(t, enabled, "missing credentials must not enable the feature")
-	require.Empty(t, *built, "no client is built from an incomplete configuration")
+	require.True(t, enabled, "missing S3 credentials must fall back to local storage")
+	require.Len(t, *built, 1)
+	require.True(t, (*built)[0].Enabled, "the saved S3 preference is preserved for the factory to select fallback storage")
+}
+
+func TestImageStorageSettingsDisabledS3DoesNotResolveBackupCredentials(t *testing.T) {
+	svc, _, built := newImageStorageFixture(t, config.ImageStorageConfig{})
+	ctx := context.Background()
+
+	_, err := svc.Update(ctx, ImageStorageSettings{Enabled: false, ReuseBackupS3: true})
+	require.NoError(t, err)
+
+	uploader, enabled := svc.resolve()
+	require.True(t, enabled)
+	require.NotNil(t, uploader)
+	require.Len(t, *built, 1)
+	require.False(t, (*built)[0].Enabled)
+	require.Empty(t, (*built)[0].Endpoint)
+	require.Empty(t, (*built)[0].AccessKeyID)
+	require.Empty(t, (*built)[0].SecretAccessKey)
+	require.False(t, svc.SecretConfigured(ctx))
 }
 
 // Deployments that already enabled the feature through config.yaml must keep

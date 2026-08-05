@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="AI 图工坊">
+  <rect width="128" height="128" rx="34" fill="#fffdf5"/>
+  <path d="M18 88C30 102 47 108 65 104C84 100 96 88 101 71C106 54 101 39 88 29C76 19 59 18 45 25C31 32 22 45 22 61C22 69 25 77 31 83" fill="#d9f8ff" stroke="#211f1c" stroke-width="6" stroke-linecap="round"/>
+  <path d="M39 88C51 96 68 96 81 87" fill="none" stroke="#211f1c" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="47" cy="58" r="7" fill="#211f1c"/>
+  <circle cx="80" cy="58" r="7" fill="#211f1c"/>
+  <circle cx="49" cy="55" r="2.5" fill="#fff"/>
+  <circle cx="82" cy="55" r="2.5" fill="#fff"/>
+  <path d="M62 68C64 70 67 70 69 68" fill="none" stroke="#211f1c" stroke-width="4" stroke-linecap="round"/>
+  <path d="M42 24L48 10L55 24L69 30L55 36L48 50L42 36L28 30Z" fill="#ffd447" stroke="#211f1c" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M91 85L96 75L101 85L112 90L101 95L96 106L91 95L80 90Z" fill="#ff5f8f" stroke="#211f1c" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M33 76C25 70 23 59 28 49" fill="none" stroke="#08a9d6" stroke-width="5" stroke-linecap="round"/>
+</svg>

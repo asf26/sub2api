@@ -1,0 +1,41 @@
+# Progress
+
+- Started Redis-backed Go async service work.
+- Confirmed planning files did not already exist.
+- Added initial Go async service files, package script, and README notes.
+- Ran `go test ./...`: passed.
+- Ran local mock smoke test against Go async service on port `8790`: submit returned `task_id`, poll returned `completed` with b64 image.
+- Ran `npm test`: 198 tests passed.
+- Ran `npm run build`: passed with the existing Vite chunk-size warning.
+- Replaced the running `gpt-image-async` tmux session with the Go async service on port `8789`.
+- Refreshed `http://127.0.0.1:5173/` in the in-app browser: no console errors.
+- Diagnosed repeated 401s: `OPENAI_API_KEY` from the service environment was overriding the frontend API key. Updated async services so only `ASYNC_IMAGE_UPSTREAM_API_KEY` can intentionally override the frontend `Authorization` header.
+- Verified the user-provided key against `https://api.gavinteam.online/v1/models`: HTTP 200.
+- Verified direct image endpoint auth/path with an invalid model: HTTP 400 instead of 401.
+- Verified async generation chain now passes auth and reaches upstream, but the real generation attempt failed later with `unexpected EOF`, indicating upstream connection closure rather than invalid key/domain.
+- Fixed refresh recovery for OpenAI-compatible async tasks: tasks with `customTaskId` now resume polling `/images/tasks/{task_id}` after `initStore()`.
+- Added store test coverage for OpenAI-compatible async task recovery after app reload.
+- Ran `npm test`: 199 tests passed.
+- Ran `npm run build`: passed with the existing Vite chunk-size warning.
+- Fixed duplicate recovery polling after refresh in local dev: React StrictMode can call the startup effect twice, so `initStore()` is now guarded by an in-flight promise and per-task recovery has an in-flight guard.
+- Diagnosed `unexpected EOF` as a roughly 60-second upstream idle disconnect after switching the worker to non-streaming requests.
+- Updated the Go async worker to use internal upstream streaming by default (`ASYNC_IMAGE_UPSTREAM_STREAM=true`) and aggregate SSE image events into JSON task results for Redis polling.
+- Verified the streaming bridge against the local mock API: submit returned `task_id`, poll returned `completed` with b64 image.
+- After EOF still reproduced at ~60s, updated the Go upstream HTTP transport to default to HTTP/1.1 (`ASYNC_IMAGE_UPSTREAM_HTTP2=false`) and disable upstream keep-alives (`ASYNC_IMAGE_UPSTREAM_DISABLE_KEEPALIVE=true`).
+- Verified a local proxy diagnostic request reaches `https://api.gavinteam.online/v1/images/generations` with `stream=true` and `partial_images=1`, returning a normal 400 for an intentionally invalid model instead of auth/routing failure.
+- Since `/images/generations` still EOFs at ~60s even with streaming, changed the Go async worker to force `/images/generations` JSON jobs through `/responses + image_generation` by default (`ASYNC_IMAGE_FORCE_RESPONSES=true`) and convert the Responses result back into Images API shape for frontend polling.
+- Verified the forced-Responses bridge with the local mock API: submitting `/images/generations` completed with `data[].b64_json` in Redis while the worker called `/responses`.
+- Found that a real `/responses` task received HTTP 200 quickly but failed while reading the streaming body with `unexpected EOF`. Updated the Go worker to parse SSE incrementally instead of `io.ReadAll` and tolerate `io.ErrUnexpectedEOF` after flushing received events.
+- Added Go coverage for unexpected EOF after a completed Responses image event.
+- Changed the Go async service default to non-streaming upstream requests (`ASYNC_IMAGE_UPSTREAM_STREAM=false`).
+- Added non-streaming Responses-to-Images conversion so forced `/images/generations -> /responses` jobs still return Images-shaped results to the frontend.
+- Added server-side temporary image storage: completed Images-shaped `b64_json` values are written to task file directories and replaced with `data[].url`; files expire after `ASYNC_IMAGE_FILE_TTL_MS` (default 1 hour).
+- Ran `go test ./...`: 13 tests passed.
+- First mock smoke attempt failed because the shell harness did not pass `SUBMIT_JSON` into the Node parser environment; retrying with explicit environment assignment.
+- Mock smoke test passed against Go service on port `8790`: `/images/generations` was forced through non-streaming `/responses`, task completed with `data[].url`, `b64_json` was absent from the task result, and the served PNG URL returned 68 bytes.
+- Restarted the local `gpt-image-async` tmux session on port `8789`; startup logs confirm `forceResponses=true`, `upstreamStream=false`, file store enabled, and file TTL `1h0m0s`.
+- Diagnosed latest browser error from service logs: a non-streaming `/responses` request first failed with `unexpected EOF` after about 60 seconds; a later task failed with `net/http: TLS handshake timeout` after 30 seconds.
+- Verified local curl can complete TLS to `https://api.gavinteam.online/v1/models` in under 1 second and receives 401 without a key, so the upstream domain itself is reachable from this machine.
+- Added Go worker retry/fallback support for retryable upstream failures: TLS handshake timeout, EOF, 502/503/504/524, and similar transport errors close idle connections and can switch from non-streaming primary request to internal streaming fallback.
+- Ran `go test ./...`: 15 tests passed.
+- Ran fallback smoke test: mock non-streaming `/responses` returned 524, worker switched to `stream-fallback`, completed the task, wrote a server temp image, and served the URL successfully.

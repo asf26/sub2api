@@ -58,11 +58,9 @@ func (noopImageStorage) Save(context.Context, string, string, []byte) (string, e
 	return "https://cdn.example.test/object.png", nil
 }
 
-// TestAsyncImageEnablesWithoutRestart drives the actual HTTP path for the bug behind
-// #4458 and #4542: with object storage unconfigured the async endpoint 404s, and the
-// only way to turn it on used to be editing config.yaml and restarting the container.
-// Flipping the admin setting must flip the endpoint over in the same process.
-func TestAsyncImageEnablesWithoutRestart(t *testing.T) {
+// TestAsyncImageSwitchesStorageWithoutRestart drives the actual HTTP path while
+// the admin switches between server-local storage and S3 in the same process.
+func TestAsyncImageSwitchesStorageWithoutRestart(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	repo := &toggleSettingRepo{values: map[string]string{}}
@@ -105,10 +103,16 @@ func TestAsyncImageEnablesWithoutRestart(t *testing.T) {
 	}
 
 	rec := submit()
-	require.Equal(t, http.StatusNotFound, rec.Code, "disabled until an admin configures object storage")
-	require.Contains(t, rec.Body.String(), "async image tasks are not enabled")
+	require.Equal(t, http.StatusAccepted, rec.Code, "server-local storage keeps async image tasks available by default")
 
-	// The admin saves the setting — no restart, same process.
+	var localAccepted struct {
+		TaskID  string `json:"task_id"`
+		PollURL string `json:"poll_url"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &localAccepted))
+	require.NotEmpty(t, localAccepted.TaskID)
+
+	// The admin enables S3: the next request switches storage without a restart.
 	_, err := settings.Update(context.Background(), service.ImageStorageSettings{
 		Enabled: true, Bucket: "my-images",
 		Endpoint: "https://acct.r2.cloudflarestorage.com", AccessKeyID: "ak", SecretAccessKey: "sk",
@@ -125,13 +129,14 @@ func TestAsyncImageEnablesWithoutRestart(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &accepted))
 	require.NotEmpty(t, accepted.TaskID)
 
-	// Turning the feature back off must not strand a task that was already accepted.
+	// Turning S3 back off switches new requests to local storage and does not
+	// strand a task that was already accepted.
 	_, err = settings.Update(context.Background(), service.ImageStorageSettings{Enabled: false})
 	require.NoError(t, err)
 
-	require.Equal(t, http.StatusNotFound, submit().Code, "new submissions are refused again")
+	require.Equal(t, http.StatusAccepted, submit().Code, "new submissions fall back to local storage")
 
 	pollRec := httptest.NewRecorder()
-	router.ServeHTTP(pollRec, httptest.NewRequest(http.MethodGet, accepted.PollURL, nil))
-	require.Equal(t, http.StatusOK, pollRec.Code, "an already-accepted task stays pollable after the switch is turned off")
+	router.ServeHTTP(pollRec, httptest.NewRequest(http.MethodGet, localAccepted.PollURL, nil))
+	require.Equal(t, http.StatusOK, pollRec.Code, "an already-accepted local task stays pollable after storage switches")
 }

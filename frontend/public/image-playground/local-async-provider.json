@@ -1,0 +1,87 @@
+{
+  "customProviders": [
+    {
+      "id": "local-async-openai",
+      "name": "本地异步 OpenAI 中转",
+      "submit": {
+        "path": "images/generations",
+        "method": "POST",
+        "contentType": "json",
+        "body": {
+          "model": "$profile.model",
+          "prompt": "$prompt",
+          "size": "$params.size",
+          "quality": "$params.quality",
+          "output_format": "$params.output_format",
+          "moderation": "$params.moderation",
+          "output_compression": "$params.output_compression",
+          "n": "$params.n"
+        },
+        "taskIdPath": "data.task_id"
+      },
+      "editSubmit": {
+        "path": "images/edits",
+        "method": "POST",
+        "contentType": "multipart",
+        "body": {
+          "model": "$profile.model",
+          "prompt": "$prompt",
+          "size": "$params.size",
+          "quality": "$params.quality",
+          "output_format": "$params.output_format",
+          "moderation": "$params.moderation",
+          "output_compression": "$params.output_compression",
+          "n": "$params.n"
+        },
+        "files": [
+          {
+            "field": "image[]",
+            "source": "inputImages",
+            "array": true
+          },
+          {
+            "field": "mask",
+            "source": "mask"
+          }
+        ],
+        "taskIdPath": "data.task_id"
+      },
+      "poll": {
+        "path": "images/tasks/{task_id}",
+        "method": "GET",
+        "intervalSeconds": 3,
+        "statusPath": "data.status",
+        "successValues": [
+          "completed"
+        ],
+        "failureValues": [
+          "failed",
+          "cancelled"
+        ],
+        "errorPath": "data.error.message",
+        "result": {
+          "imageUrlPaths": [
+            "data.result.data.*.url"
+          ],
+          "b64JsonPaths": [
+            "data.result.data.*.b64_json"
+          ]
+        }
+      }
+    }
+  ],
+  "profiles": [
+    {
+      "id": "local-async-openai-profile",
+      "name": "本地异步中转",
+      "provider": "local-async-openai",
+      "baseUrl": "http://127.0.0.1:8789/v1",
+      "apiKey": "",
+      "model": "gpt-image-2",
+      "apiMode": "images",
+      "timeout": 30,
+      "apiProxy": false,
+      "streamImages": false
+    }
+  ]
+}

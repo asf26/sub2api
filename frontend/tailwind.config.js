@@ -62,6 +62,14 @@ export default {
           'Microsoft YaHei',
           'sans-serif'
         ],
+        display: [
+          'Trebuchet MS',
+          'PingFang SC',
+          'Hiragino Sans GB',
+          'Microsoft YaHei',
+          'system-ui',
+          'sans-serif'
+        ],
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace']
       },
       boxShadow: {

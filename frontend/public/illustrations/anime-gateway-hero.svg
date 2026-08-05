@@ -1,0 +1,264 @@
+<svg width="1600" height="1000" viewBox="0 0 1600 1000" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="156" y1="60" x2="1458" y2="940" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8E8" />
+      <stop offset="0.42" stop-color="#ECFBFF" />
+      <stop offset="0.73" stop-color="#FFF0F7" />
+      <stop offset="1" stop-color="#EAF0FF" />
+    </linearGradient>
+    <linearGradient id="frame" x1="212" y1="182" x2="1120" y2="820" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity="0.96" />
+      <stop offset="1" stop-color="#D6F6FF" stop-opacity="0.72" />
+    </linearGradient>
+    <linearGradient id="frameInner" x1="260" y1="230" x2="1076" y2="776" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F9FDFF" stop-opacity="0.98" />
+      <stop offset="1" stop-color="#FFEFF8" stop-opacity="0.9" />
+    </linearGradient>
+    <linearGradient id="heroCard" x1="525" y1="290" x2="854" y2="612" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF5D0" />
+      <stop offset="0.45" stop-color="#FFD95C" />
+      <stop offset="1" stop-color="#FF8E5D" />
+    </linearGradient>
+    <linearGradient id="keyMetal" x1="597" y1="330" x2="775" y2="560" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8D9" />
+      <stop offset="1" stop-color="#FFCE4C" />
+    </linearGradient>
+    <linearGradient id="pinkChip" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#FF7AAE" />
+      <stop offset="1" stop-color="#FF4F7B" />
+    </linearGradient>
+    <linearGradient id="cyanChip" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#4EE9FF" />
+      <stop offset="1" stop-color="#1AB6E8" />
+    </linearGradient>
+    <linearGradient id="violetChip" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#A98BFF" />
+      <stop offset="1" stop-color="#6D5BFF" />
+    </linearGradient>
+    <linearGradient id="greenChip" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#89F5C8" />
+      <stop offset="1" stop-color="#2FCB92" />
+    </linearGradient>
+    <linearGradient id="goldChip" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#FFE597" />
+      <stop offset="1" stop-color="#FFB938" />
+    </linearGradient>
+    <pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse">
+      <circle cx="6" cy="6" r="1.8" fill="#1F1B17" fill-opacity="0.09" />
+    </pattern>
+    <pattern id="hatch" width="22" height="22" patternUnits="userSpaceOnUse" patternTransform="rotate(28)">
+      <path d="M0 0H22" stroke="#1F1B17" stroke-opacity="0.06" stroke-width="3" />
+    </pattern>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="20" stdDeviation="22" flood-color="#1F1B17" flood-opacity="0.16" />
+    </filter>
+    <filter id="deepShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="14" stdDeviation="14" flood-color="#1F1B17" flood-opacity="0.22" />
+    </filter>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="10" result="blur" />
+      <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0.06 0 1 0 0 0.52 0 0 1 0 0.84 0 0 0 1 0" />
+    </filter>
+  </defs>
+
+  <rect width="1600" height="1000" fill="url(#bg)" />
+  <rect width="1600" height="1000" fill="url(#dots)" opacity="0.72" />
+  <rect width="1600" height="1000" fill="url(#hatch)" opacity="0.28" />
+
+  <path d="M0 158L154 100L400 146L268 254L0 218Z" fill="#FF7AAE" fill-opacity="0.22" />
+  <path d="M1220 54L1600 0V168L1380 214L1208 172L1220 54Z" fill="#52D7FF" fill-opacity="0.22" />
+  <path d="M1184 800L1600 650V1000H1220L1184 800Z" fill="#8E79FF" fill-opacity="0.18" />
+
+  <g opacity="0.55">
+    <path d="M126 690H532" stroke="#FF7AAE" stroke-opacity="0.3" stroke-width="8" stroke-linecap="round" />
+    <path d="M146 736H426" stroke="#1AB6E8" stroke-opacity="0.24" stroke-width="6" stroke-linecap="round" />
+    <path d="M1072 176H1410" stroke="#1AB6E8" stroke-opacity="0.26" stroke-width="8" stroke-linecap="round" />
+    <path d="M1060 220H1288" stroke="#FF7AAE" stroke-opacity="0.28" stroke-width="6" stroke-linecap="round" />
+  </g>
+
+  <g filter="url(#softShadow)">
+    <path
+      d="M214 180H1108C1148 180 1180 212 1180 252V760C1180 800 1148 832 1108 832H254C214 832 182 800 182 760V252C182 212 214 180 254 180H214Z"
+      fill="url(#frame)"
+      stroke="#1F1B17"
+      stroke-width="4"
+    />
+    <path
+      d="M242 214H1080C1100 214 1116 230 1116 250V742C1116 762 1100 778 1080 778H258C238 778 222 762 222 742V250C222 230 238 214 258 214H242Z"
+      fill="url(#frameInner)"
+      stroke="#1F1B17"
+      stroke-opacity="0.92"
+      stroke-width="3.5"
+    />
+    <path d="M236 230H1090" stroke="#1F1B17" stroke-opacity="0.1" stroke-width="3" />
+    <path d="M236 742H1090" stroke="#1F1B17" stroke-opacity="0.08" stroke-width="3" />
+  </g>
+
+  <g transform="translate(282 262)" filter="url(#deepShadow)">
+    <path
+      d="M0 0H322C347 0 367 20 367 45V188C367 213 347 233 322 233H54C24 233 0 209 0 179V0Z"
+      fill="#FFF9EC"
+      stroke="#1F1B17"
+      stroke-width="4"
+    />
+    <path d="M22 22H345" stroke="#1F1B17" stroke-opacity="0.08" stroke-width="3" />
+    <text x="28" y="58" fill="#1F1B17" font-family="Trebuchet MS, PingFang SC, sans-serif" font-size="16" font-weight="700" letter-spacing="4">
+      ONE KEY HUB
+    </text>
+    <text x="28" y="96" fill="#1F1B17" font-family="Trebuchet MS, PingFang SC, sans-serif" font-size="34" font-weight="800">
+      一把 Key
+    </text>
+    <text x="28" y="136" fill="#1F1B17" font-family="Trebuchet MS, PingFang SC, sans-serif" font-size="30" font-weight="800">
+      接入顶尖模型
+    </text>
+    <rect x="28" y="160" width="108" height="32" rx="16" fill="url(#pinkChip)" stroke="#1F1B17" stroke-width="3" />
+    <text x="82" y="181" text-anchor="middle" fill="#FFF" font-family="Trebuchet MS, PingFang SC, sans-serif" font-size="15" font-weight="700">
+      路由中枢
+    </text>
+    <rect x="146" y="160" width="90" height="32" rx="16" fill="url(#cyanChip)" stroke="#1F1B17" stroke-width="3" />
+    <text x="191" y="181" text-anchor="middle" fill="#FFF" font-family="Trebuchet MS, PingFang SC, sans-serif" font-size="15" font-weight="700">
+      透明账单
+    </text>
+  </g>
+
+  <g transform="translate(624 286)" filter="url(#deepShadow)">
+    <ellipse cx="160" cy="205" rx="196" ry="128" fill="#FFEB99" fill-opacity="0.46" filter="url(#glow)" />
+    <path
+      d="M160 18C238 18 310 64 310 146V242C310 324 238 370 160 370C82 370 10 324 10 242V146C10 64 82 18 160 18Z"
+      fill="url(#heroCard)"
+      stroke="#1F1B17"
+      stroke-width="5"
+    />
+    <path
+      d="M76 54C98 32 130 20 160 20C190 20 222 32 244 54"
+      stroke="#FFF9D9"
+      stroke-opacity="0.8"
+      stroke-width="10"
+      stroke-linecap="round"
+    />
+    <circle cx="160" cy="124" r="56" fill="#FFF8DA" stroke="#1F1B17" stroke-width="8" />
+    <circle cx="160" cy="124" r="18" fill="#FFF1B4" stroke="#1F1B17" stroke-width="6" />
+    <rect x="116" y="180" width="88" height="108" rx="28" fill="url(#keyMetal)" stroke="#1F1B17" stroke-width="8" />
+    <rect x="202" y="198" width="86" height="28" rx="14" fill="url(#keyMetal)" stroke="#1F1B17" stroke-width="8" />
+    <rect x="272" y="187" width="22" height="22" rx="7" fill="#FFD35A" stroke="#1F1B17" stroke-width="6" />
+    <rect x="302" y="176" width="20" height="20" rx="7" fill="#FFD35A" stroke="#1F1B17" stroke-width="6" />
+    <path d="M148 214H184" stroke="#1F1B17" stroke-width="7" stroke-linecap="round" />
+    <path d="M138 246H194" stroke="#1F1B17" stroke-width="7" stroke-linecap="round" />
+    <path d="M140 278H182" stroke="#1F1B17" stroke-width="7" stroke-linecap="round" />
+    <text x="160" y="330" text-anchor="middle" fill="#1F1B17" font-family="Trebuchet MS, PingFang SC, sans-serif" font-size="18" font-weight="800">
+      ONE KEY
+    </text>
+  </g>
+
+  <g filter="url(#deepShadow)">
+    <path
+      d="M350 214C388 178 446 166 492 188C539 210 564 263 552 315C541 362 496 394 444 394C390 394 342 358 331 305C321 262 330 230 350 214Z"
+      fill="#FFF8EA"
+      stroke="#1F1B17"
+      stroke-width="4"
+    />
+    <path d="M358 258C372 226 408 208 442 212C478 216 508 243 516 279" stroke="#1F1B17" stroke-opacity="0.12" stroke-width="4" />
+    <circle cx="412" cy="286" r="16" fill="#1F1B17" />
+    <circle cx="474" cy="286" r="16" fill="#1F1B17" />
+    <path d="M404 328C426 344 458 344 486 328" stroke="#1F1B17" stroke-width="5" stroke-linecap="round" />
+    <path d="M362 230C378 196 416 178 458 180C500 182 532 204 544 240" stroke="#FF7AAE" stroke-width="14" stroke-linecap="round" />
+    <path d="M356 244C372 214 400 196 434 190" stroke="#1AB6E8" stroke-width="10" stroke-linecap="round" />
+  </g>
+
+  <g transform="translate(964 250)">
+    <g filter="url(#deepShadow)">
+      <path d="M0 30C0 13.432 13.432 0 30 0H226C242.568 0 256 13.432 256 30V116C256 132.568 242.568 146 226 146H30C13.432 146 0 132.568 0 116V30Z" fill="#FFFFFF" fill-opacity="0.96" stroke="#1F1B17" stroke-width="4" />
+      <rect x="20" y="18" width="96" height="32" rx="16" fill="url(#pinkChip)" stroke="#1F1B17" stroke-width="3" />
+      <text x="68" y="39" text-anchor="middle" fill="#FFF" font-family="Trebuchet MS, PingFang SC, sans-serif" font-size="16" font-weight="800">GPT</text>
+      <text x="22" y="96" fill="#1F1B17" font-family="Trebuchet MS, PingFang SC, sans-serif" font-size="18" font-weight="800">顶尖模型</text>
+      <text x="22" y="122" fill="#1F1B17" font-family="Trebuchet MS, PingFang SC, sans-serif" font-size="13" font-weight="700" fill-opacity="0.72">高速稳定 · 多通道</text>
+    </g>
+    <path d="M0 73H-80" stroke="#1F1B17" stroke-width="4" stroke-linecap="round" />
+  </g>
+
+  <g transform="translate(1014 520)">
+    <g filter="url(#deepShadow)">
+      <path d="M0 30C0 13.432 13.432 0 30 0H230C246.568 0 260 13.432 260 30V116C260 132.568 246.568 146 230 146H30C13.432 146 0 132.568 0 116V30Z" fill="#FFFFFF" fill-opacity="0.96" stroke="#1F1B17" stroke-width="4" />
+      <rect x="18" y="18" width="122" height="32" rx="16" fill="url(#cyanChip)" stroke="#1F1B17" stroke-width="3" />
+      <text x="79" y="39" text-anchor="middle" fill="#FFF" font-family="Trebuchet MS, PingFang SC, sans-serif" font-size="16" font-weight="800">Claude</text>
+      <text x="22" y="96" fill="#1F1B17" font-family="Trebuchet MS, PingFang SC, sans-serif" font-size="18" font-weight="800">语义编排</text>
+      <text x="22" y="122" fill="#1F1B17" font-family="Trebuchet MS, PingFang SC, sans-serif" font-size="13" font-weight="700" fill-opacity="0.72">长上下文 · 低噪声</text>
+    </g>
+    <path d="M0 73H-96" stroke="#1F1B17" stroke-width="4" stroke-linecap="round" />
+  </g>
+
+  <g transform="translate(956 706)">
+    <g filter="url(#deepShadow)">
+      <path d="M0 30C0 13.432 13.432 0 30 0H226C242.568 0 256 13.432 256 30V116C256 132.568 242.568 146 226 146H30C13.432 146 0 132.568 0 116V30Z" fill="#FFFFFF" fill-opacity="0.96" stroke="#1F1B17" stroke-width="4" />
+      <rect x="20" y="18" width="126" height="32" rx="16" fill="url(#violetChip)" stroke="#1F1B17" stroke-width="3" />
+      <text x="83" y="39" text-anchor="middle" fill="#FFF" font-family="Trebuchet MS, PingFang SC, sans-serif" font-size="16" font-weight="800">Gemini</text>
+      <text x="22" y="96" fill="#1F1B17" font-family="Trebuchet MS, PingFang SC, sans-serif" font-size="18" font-weight="800">多模态</text>
+      <text x="22" y="122" fill="#1F1B17" font-family="Trebuchet MS, PingFang SC, sans-serif" font-size="13" font-weight="700" fill-opacity="0.72">图文音视频一体</text>
+    </g>
+    <path d="M0 73H-88" stroke="#1F1B17" stroke-width="4" stroke-linecap="round" />
+  </g>
+
+  <g transform="translate(334 520)">
+    <g filter="url(#deepShadow)">
+      <path d="M0 30C0 13.432 13.432 0 30 0H234C250.568 0 264 13.432 264 30V116C264 132.568 250.568 146 234 146H30C13.432 146 0 132.568 0 116V30Z" fill="#FFFFFF" fill-opacity="0.96" stroke="#1F1B17" stroke-width="4" />
+      <rect x="18" y="18" width="132" height="32" rx="16" fill="url(#greenChip)" stroke="#1F1B17" stroke-width="3" />
+      <text x="84" y="39" text-anchor="middle" fill="#FFF" font-family="Trebuchet MS, PingFang SC, sans-serif" font-size="16" font-weight="800">DeepSeek</text>
+      <text x="22" y="96" fill="#1F1B17" font-family="Trebuchet MS, PingFang SC, sans-serif" font-size="18" font-weight="800">智能分流</text>
+      <text x="22" y="122" fill="#1F1B17" font-family="Trebuchet MS, PingFang SC, sans-serif" font-size="13" font-weight="700" fill-opacity="0.72">成本友好 · 规则清晰</text>
+    </g>
+    <path d="M264 73H334" stroke="#1F1B17" stroke-width="4" stroke-linecap="round" />
+  </g>
+
+  <g transform="translate(322 708)">
+    <g filter="url(#deepShadow)">
+      <path d="M0 30C0 13.432 13.432 0 30 0H232C248.568 0 262 13.432 262 30V116C262 132.568 248.568 146 232 146H30C13.432 146 0 132.568 0 116V30Z" fill="#FFFFFF" fill-opacity="0.96" stroke="#1F1B17" stroke-width="4" />
+      <rect x="18" y="18" width="102" height="32" rx="16" fill="url(#goldChip)" stroke="#1F1B17" stroke-width="3" />
+      <text x="69" y="39" text-anchor="middle" fill="#1F1B17" font-family="Trebuchet MS, PingFang SC, sans-serif" font-size="16" font-weight="800">Grok</text>
+      <text x="22" y="96" fill="#1F1B17" font-family="Trebuchet MS, PingFang SC, sans-serif" font-size="18" font-weight="800">实时感知</text>
+      <text x="22" y="122" fill="#1F1B17" font-family="Trebuchet MS, PingFang SC, sans-serif" font-size="13" font-weight="700" fill-opacity="0.72">快响应 · 高活力</text>
+    </g>
+    <path d="M262 73H324" stroke="#1F1B17" stroke-width="4" stroke-linecap="round" />
+  </g>
+
+  <g transform="translate(380 380)" opacity="0.95">
+    <path d="M0 0H12" stroke="#1AB6E8" stroke-width="6" stroke-linecap="round" />
+    <path d="M6 18V30" stroke="#1AB6E8" stroke-width="6" stroke-linecap="round" />
+    <path d="M24 6H36" stroke="#FF7AAE" stroke-width="6" stroke-linecap="round" />
+    <path d="M30 0V12" stroke="#FF7AAE" stroke-width="6" stroke-linecap="round" />
+  </g>
+  <g transform="translate(1112 392)" opacity="0.95">
+    <path d="M0 0H12" stroke="#FF7AAE" stroke-width="6" stroke-linecap="round" />
+    <path d="M6 18V30" stroke="#FF7AAE" stroke-width="6" stroke-linecap="round" />
+    <path d="M24 6H36" stroke="#1AB6E8" stroke-width="6" stroke-linecap="round" />
+    <path d="M30 0V12" stroke="#1AB6E8" stroke-width="6" stroke-linecap="round" />
+  </g>
+  <g transform="translate(1176 266)" opacity="0.95">
+    <path d="M0 0H12" stroke="#7E63FF" stroke-width="6" stroke-linecap="round" />
+    <path d="M6 18V30" stroke="#7E63FF" stroke-width="6" stroke-linecap="round" />
+    <path d="M24 6H36" stroke="#FFE34F" stroke-width="6" stroke-linecap="round" />
+    <path d="M30 0V12" stroke="#FFE34F" stroke-width="6" stroke-linecap="round" />
+  </g>
+
+  <g transform="translate(1094 110)" filter="url(#deepShadow)">
+    <path d="M18 0H188L220 32V120C220 137.673 205.673 152 188 152H18C8.059 152 0 143.941 0 134V18C0 8.059 8.059 0 18 0Z" fill="#FFFDF8" fill-opacity="0.94" stroke="#1F1B17" stroke-width="4" />
+    <text x="22" y="48" fill="#1F1B17" font-family="Trebuchet MS, PingFang SC, sans-serif" font-size="18" font-weight="800">
+      模型矩阵
+    </text>
+    <text x="22" y="78" fill="#1F1B17" font-family="Trebuchet MS, PingFang SC, sans-serif" font-size="13" font-weight="700" fill-opacity="0.72">
+      一个 Key，统一入口
+    </text>
+    <rect x="22" y="96" width="72" height="30" rx="15" fill="url(#pinkChip)" stroke="#1F1B17" stroke-width="3" />
+    <rect x="100" y="96" width="84" height="30" rx="15" fill="url(#cyanChip)" stroke="#1F1B17" stroke-width="3" />
+  </g>
+
+  <g transform="translate(250 120)" opacity="0.86">
+    <path d="M0 0L14 20L32 8L22 28L40 42L16 38L8 60L0 38L-24 42L-6 28L-16 8L0 0Z" fill="#FFD95C" stroke="#1F1B17" stroke-width="3" />
+  </g>
+  <g transform="translate(1350 760)" opacity="0.78">
+    <path d="M0 0L16 24L38 10L24 34L44 50L18 46L10 72L0 46L-26 50L-8 34L-20 10L0 0Z" fill="#FF7AAE" stroke="#1F1B17" stroke-width="3" />
+  </g>
+  <g transform="translate(1260 462)" opacity="0.9">
+    <path d="M0 12C14 0 26 0 40 12C26 24 14 24 0 12Z" fill="#1AB6E8" stroke="#1F1B17" stroke-width="3" />
+    <path d="M18 0C30 14 30 26 18 40C6 26 6 14 18 0Z" fill="#FF7AAE" fill-opacity="0.9" stroke="#1F1B17" stroke-width="3" />
+  </g>
+</svg>

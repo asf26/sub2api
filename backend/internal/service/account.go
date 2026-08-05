@@ -4,8 +4,10 @@ package service
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"hash/fnv"
 	"log/slog"
+	"math"
 	"reflect"
 	"sort"
 	"strconv"
@@ -105,6 +107,17 @@ const (
 
 const openAIEndpointCapabilitiesCredentialKey = "openai_capabilities"
 
+const XiaoVideoPricingCredentialKey = "video_pricing"
+
+type XiaoVideoPricingRule struct {
+	Model               string  `json:"model"`
+	Resolution          string  `json:"resolution"`
+	PricePerSecond      float64 `json:"price_per_second"`
+	AudioPricePerSecond float64 `json:"audio_price_per_second,omitempty"`
+	DefaultResolution   bool    `json:"default_resolution,omitempty"`
+	DefaultDuration     int     `json:"default_duration,omitempty"`
+}
+
 // GrokMediaEligibleExtraKey is an optional per-account override stored in
 // accounts.extra. true forces media routing on, false disables it, and an
 // absent/null value uses provider observations.
@@ -160,6 +173,121 @@ func (a *Account) BillingRateMultiplier() float64 {
 		return 1.0
 	}
 	return *a.RateMultiplier
+}
+
+func (a *Account) XiaoVideoPricingRules() ([]XiaoVideoPricingRule, error) {
+	if a == nil || a.Credentials == nil {
+		return nil, errors.New("xiaoapi video pricing is not configured")
+	}
+	raw, ok := a.Credentials[XiaoVideoPricingCredentialKey]
+	if !ok || raw == nil {
+		return nil, errors.New("xiaoapi video pricing is not configured")
+	}
+	encoded, err := json.Marshal(raw)
+	if err != nil {
+		return nil, fmt.Errorf("encode xiaoapi video pricing: %w", err)
+	}
+	decoder := json.NewDecoder(strings.NewReader(string(encoded)))
+	decoder.DisallowUnknownFields()
+	var rules []XiaoVideoPricingRule
+	if err := decoder.Decode(&rules); err != nil {
+		return nil, fmt.Errorf("decode xiaoapi video pricing: %w", err)
+	}
+	if len(rules) == 0 {
+		return nil, errors.New("xiaoapi video pricing must contain at least one rule")
+	}
+	if len(rules) > 1000 {
+		return nil, errors.New("xiaoapi video pricing must not contain more than 1000 rules")
+	}
+	seen := make(map[string]struct{}, len(rules))
+	defaultResolutionByModel := make(map[string]struct{})
+	for i := range rules {
+		rule := &rules[i]
+		rule.Model = strings.TrimSpace(rule.Model)
+		rule.Resolution = strings.TrimSpace(rule.Resolution)
+		if rule.Model == "" || len(rule.Model) > 128 {
+			return nil, fmt.Errorf("xiaoapi video pricing rule %d has an invalid model", i+1)
+		}
+		if rule.Resolution == "" || len(rule.Resolution) > 64 {
+			return nil, fmt.Errorf("xiaoapi video pricing rule %d has an invalid resolution", i+1)
+		}
+		if rule.PricePerSecond < 0 || math.IsNaN(rule.PricePerSecond) || math.IsInf(rule.PricePerSecond, 0) {
+			return nil, fmt.Errorf("xiaoapi video pricing rule %d has an invalid price_per_second", i+1)
+		}
+		if rule.AudioPricePerSecond < 0 || math.IsNaN(rule.AudioPricePerSecond) || math.IsInf(rule.AudioPricePerSecond, 0) {
+			return nil, fmt.Errorf("xiaoapi video pricing rule %d has an invalid audio_price_per_second", i+1)
+		}
+		if rule.DefaultDuration < 0 || rule.DefaultDuration > 3600 {
+			return nil, fmt.Errorf("xiaoapi video pricing rule %d has an invalid default_duration", i+1)
+		}
+		key := rule.Model + "\x00" + rule.Resolution
+		if _, exists := seen[key]; exists {
+			return nil, fmt.Errorf("xiaoapi video pricing contains duplicate model/resolution %q/%q", rule.Model, rule.Resolution)
+		}
+		seen[key] = struct{}{}
+		if rule.DefaultResolution {
+			if _, exists := defaultResolutionByModel[rule.Model]; exists {
+				return nil, fmt.Errorf("xiaoapi video pricing model %q has more than one default resolution", rule.Model)
+			}
+			defaultResolutionByModel[rule.Model] = struct{}{}
+		}
+	}
+	return rules, nil
+}
+
+func (a *Account) XiaoVideoPrice(model, resolution string, duration int, audio bool) (float64, string, int, bool) {
+	rules, err := a.XiaoVideoPricingRules()
+	if err != nil {
+		return 0, "", 0, false
+	}
+	model = strings.TrimSpace(model)
+	resolution = strings.TrimSpace(resolution)
+	candidates := make([]XiaoVideoPricingRule, 0)
+	for _, rule := range rules {
+		if rule.Model == model {
+			candidates = append(candidates, rule)
+		}
+	}
+	if len(candidates) == 0 {
+		return 0, "", 0, false
+	}
+	var selected *XiaoVideoPricingRule
+	if resolution != "" {
+		for i := range candidates {
+			if candidates[i].Resolution == resolution {
+				selected = &candidates[i]
+				break
+			}
+		}
+	} else {
+		for i := range candidates {
+			if candidates[i].DefaultResolution {
+				selected = &candidates[i]
+				break
+			}
+		}
+		if selected == nil && len(candidates) == 1 {
+			selected = &candidates[0]
+		}
+	}
+	if selected == nil {
+		return 0, "", 0, false
+	}
+	if duration == 0 {
+		duration = selected.DefaultDuration
+	}
+	if duration <= 0 {
+		return 0, "", 0, false
+	}
+	rate := selected.PricePerSecond
+	if audio {
+		rate += selected.AudioPricePerSecond
+	}
+	amount := float64(duration) * rate
+	if amount < 0 || math.IsNaN(amount) || math.IsInf(amount, 0) {
+		return 0, "", 0, false
+	}
+	return amount, selected.Resolution, duration, true
 }
 
 func (a *Account) EffectiveLoadFactor() int {
@@ -263,6 +391,10 @@ func (a *Account) IsGemini() bool {
 
 func (a *Account) IsGrok() bool {
 	return a.Platform == PlatformGrok
+}
+
+func (a *Account) IsXiaoAPI() bool {
+	return a != nil && a.Platform == PlatformXiaoAPI
 }
 
 func (a *Account) IsGrokOAuth() bool {

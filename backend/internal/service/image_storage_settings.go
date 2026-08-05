@@ -106,13 +106,9 @@ func (s *ImageStorageSettingService) resolve() (*ImageResultUploader, bool) {
 		logger.L().Warn("image_storage.settings_load_failed; async image tasks stay disabled", zap.Error(err))
 		return nil, false
 	}
-	if !cfg.Enabled {
-		return nil, false
-	}
-	if !cfg.IsConfigured() {
-		logger.L().Warn("image_storage is enabled but not fully configured; async image tasks are disabled",
+	if cfg.Enabled && !cfg.IsConfigured() {
+		logger.L().Warn("image_storage S3 is enabled but not fully configured; using local image storage",
 			zap.Strings("missing_keys", cfg.MissingCredentialKeys()))
-		return nil, false
 	}
 
 	storage, err := s.factory(ctx, cfg)
@@ -154,7 +150,10 @@ func (s *ImageStorageSettingService) Get(ctx context.Context) (*ImageStorageSett
 func (s *ImageStorageSettingService) SecretConfigured(ctx context.Context) bool {
 	settings, err := s.load(ctx)
 	if err != nil || settings == nil {
-		return s.fallback.SecretAccessKey != ""
+		return s.fallback.Enabled && s.fallback.SecretAccessKey != ""
+	}
+	if !settings.Enabled {
+		return false
 	}
 	if settings.ReuseBackupS3 {
 		cfg, err := s.backupCredentials(ctx)
@@ -167,7 +166,9 @@ func (s *ImageStorageSettingService) SecretConfigured(ctx context.Context) bool 
 func (s *ImageStorageSettingService) Update(ctx context.Context, in ImageStorageSettings) (*ImageStorageSettings, error) {
 	normalizeImageStorageSettings(&in)
 
-	if in.ReuseBackupS3 {
+	// A disabled S3 switch must never resolve or decrypt remote credentials.
+	// The factory will select the server's persistent local storage instead.
+	if in.Enabled && in.ReuseBackupS3 {
 		// 复用备份凭证时不落自己的密钥，避免同一份密钥在库里存两份。
 		in.Endpoint, in.Region, in.AccessKeyID, in.SecretAccessKey = "", "", "", ""
 		in.ForcePathStyle = false
@@ -252,7 +253,7 @@ func (s *ImageStorageSettingService) toImageStorageConfig(ctx context.Context, i
 		ForcePathStyle:  in.ForcePathStyle,
 	}
 
-	if in.ReuseBackupS3 {
+	if in.Enabled && in.ReuseBackupS3 {
 		backupCfg, err := s.backupCredentials(ctx)
 		if err != nil {
 			return nil, err
@@ -268,7 +269,7 @@ func (s *ImageStorageSettingService) toImageStorageConfig(ctx context.Context, i
 		if cfg.Bucket == "" {
 			cfg.Bucket = backupCfg.Bucket
 		}
-	} else if cfg.SecretAccessKey != "" {
+	} else if in.Enabled && cfg.SecretAccessKey != "" {
 		decrypted, err := s.encryptor.Decrypt(cfg.SecretAccessKey)
 		if err != nil {
 			// 兼容未加密的旧数据，与备份配置的处理保持一致。

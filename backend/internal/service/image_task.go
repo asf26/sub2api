@@ -69,10 +69,10 @@ type ImageTaskStore interface {
 	Get(ctx context.Context, id string) (*ImageTaskRecord, error)
 }
 
-// ImageStorageResolver reports the currently effective object-storage binding.
-// It exists so the async image feature can be switched on and off from the admin
-// UI without a restart: the wiring below is fixed at startup, but the answer to
-// "is object storage configured right now" is re-read (and cached) per call.
+// ImageStorageResolver reports the currently effective persistent-storage binding.
+// It exists so the storage backend can be switched from the admin UI without a
+// restart: the wiring below is fixed at startup, but the answer to
+// "which persistent image storage is active right now" is re-read (and cached) per call.
 type ImageStorageResolver func() (uploader *ImageResultUploader, enabled bool)
 
 type ImageTaskService struct {
@@ -127,8 +127,8 @@ func (s *ImageTaskService) current() (*ImageResultUploader, bool) {
 	return s.uploader, s.enabled
 }
 
-// Enabled 表示异步图片任务功能是否可用（总开关 + 凭证齐全）。
-// 关闭时 handler 直接返回 404，不创建任务、不写 Redis。
+// Enabled reports whether the task store and either persistent storage backend
+// are available. Disabling S3 alone does not disable image tasks.
 func (s *ImageTaskService) Enabled() bool {
 	if s == nil || s.store == nil {
 		return false
@@ -196,7 +196,7 @@ func (s *ImageTaskService) Complete(ctx context.Context, id string, statusCode i
 		if err != nil {
 			// 转存失败不回退存 base64，避免大 blob 撑爆 Redis：直接把任务标记为失败。
 			logger.L().Error("image_task.offload_failed", zap.String("task_id", id), zap.Error(err))
-			return s.Fail(ctx, id, http.StatusBadGateway, imageTaskErrorJSON("api_error", "failed to store generated image to object storage"))
+			return s.Fail(ctx, id, http.StatusBadGateway, imageTaskErrorJSON("api_error", "failed to store generated image"))
 		}
 		result = rewritten
 	}

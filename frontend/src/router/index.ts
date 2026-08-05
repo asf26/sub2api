@@ -229,6 +229,36 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/images',
+    name: 'ImagePlayground',
+    component: () => import('@/views/user/ImagePlaygroundView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: '图工坊'
+    }
+  },
+  {
+    path: '/videos',
+    name: 'VideoStudio',
+    component: () => import('@/views/user/VideoStudioView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: '视频创作'
+    }
+  },
+  {
+    path: '/docs/video-api',
+    name: 'VideoAPIDocs',
+    component: () => import('@/views/user/VideoAPIDocsView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: '视频 API 文档'
+    }
+  },
+  {
     path: '/usage',
     name: 'Usage',
     component: () => import('@/views/user/UsageView.vue'),
@@ -534,6 +564,18 @@ const routes: RouteRecordRaw[] = [
       title: 'Announcements',
       titleKey: 'admin.announcements.title',
       descriptionKey: 'admin.announcements.description'
+    }
+  },
+  {
+    path: '/admin/xiao-video',
+    name: 'AdminXiaoVideo',
+    component: () => import('@/views/admin/XiaoVideoView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'XiaoAPI Video',
+      titleKey: 'admin.xiaoVideo.title',
+      descriptionKey: 'admin.xiaoVideo.description'
     }
   },
   {

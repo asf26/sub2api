@@ -596,6 +596,33 @@ export default {
         testModeCompact: 'Compact probe',
         modelRestrictionDisabledByPassthrough: 'Automatic passthrough is enabled: model whitelist/mapping will not take effect.',
       },
+      xiaoapi: {
+        baseUrlHint: 'Enter the configurable XiaoAPI video upstream URL',
+        apiKeyHint: 'Enter the API key issued by this video upstream',
+        modelMapping: 'Model mapping',
+        addMapping: 'Add mapping',
+        publicModel: 'Public model',
+        upstreamModel: 'Upstream model',
+        pricing: 'Video selling price (USD)',
+        addPricing: 'Add price',
+        resolution: 'Resolution',
+        pricePerSecond: 'Price / second',
+        audioPricePerSecond: 'Audio / second',
+        defaultDuration: 'Default seconds',
+        defaultResolution: 'Default',
+        baseUrlRequired: 'XiaoAPI upstream Base URL is required.',
+        validation: {
+          required: 'Add at least one video price.',
+          modelRequired: 'Every video price requires a public model.',
+          resolutionRequired: 'Every video price requires a resolution.',
+          priceInvalid: 'Price per second must be zero or greater.',
+          audioPriceInvalid: 'Audio price per second must be zero or greater.',
+          durationInvalid: 'Default duration must be an integer from 1 to 3600 seconds.',
+          duplicateRule: 'The same model and resolution cannot be priced twice.',
+          multipleDefaults: 'A model can have only one default resolution.',
+          defaultRequired: 'Select one default resolution for each model with multiple resolutions.'
+        }
+      },
       grok: {
         baseUrlHint: 'Grok OAuth accounts forward to the official xAI API base URL.',
         apiKeyHint: 'Grok subscription support uses OAuth refresh tokens; API keys are out of scope for this account type.'
@@ -648,7 +675,7 @@ export default {
       poolMode: 'Pool Mode',
       poolModeHint: 'Enable when upstream is an account pool; errors won\'t mark local account status',
       poolModeInfo:
-        'When enabled, upstream 429/403/401 errors will auto-retry without marking the account as rate-limited or errored. Suitable for upstream pointing to another sub2api instance.',
+        'When enabled, upstream 401/403/429 and transient 502/503/504 errors will auto-retry without marking the account as rate-limited or errored. Suitable for upstream pointing to another sub2api instance.',
       poolModeRetryCount: 'Same-Account Retries',
       poolModeRetryCountHint:
         'Only applies in pool mode. Use 0 to disable in-place retry. Default {default}, maximum {max}.',

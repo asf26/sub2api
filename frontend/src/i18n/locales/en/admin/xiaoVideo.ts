@@ -1,0 +1,50 @@
+export default {
+  xiaoVideo: {
+    title: 'XiaoAPI Video',
+    description: 'Manage video upstreams, model mappings, and public selling prices',
+    upstreams: 'Video upstreams',
+    upstreamCount: '{count} total',
+    addUpstream: 'Add video upstream',
+    newUpstream: 'New video upstream',
+    empty: 'No video upstreams',
+    upstreamSettings: 'Upstream settings',
+    modelsAndPricing: 'Model mapping and selling prices',
+    name: 'Upstream name',
+    baseUrl: 'Upstream Base URL',
+    apiKey: 'Upstream API Key',
+    apiKeyUnchanged: 'Leave blank to keep the current API key',
+    status: 'Status',
+    errorStatus: 'Error',
+    concurrency: 'Concurrency',
+    concurrencyValue: '{count} concurrent',
+    notes: 'Notes',
+    groups: 'Linked XiaoAPI groups',
+    manageGroups: 'Manage groups',
+    noGroups: 'No XiaoAPI groups',
+    testConnection: 'Test connection',
+    testing: 'Testing',
+    created: 'Video upstream created',
+    updated: 'Video upstream saved',
+    deleted: 'Video upstream deleted',
+    loadFailed: 'Failed to load XiaoAPI video settings',
+    saveFailed: 'Failed to save XiaoAPI video settings',
+    deleteFailed: 'Failed to delete XiaoAPI video upstream',
+    testSucceeded: 'Upstream connection succeeded',
+    testFailed: 'Upstream connection test failed',
+    invalidPlatform: 'This account is not a XiaoAPI video upstream',
+    discardChanges: 'Discard the unsaved changes?',
+    deleteConfirm: 'Delete video upstream "{name}"?',
+    validation: {
+      nameRequired: 'Upstream name is required.',
+      baseUrlInvalid: 'Enter an HTTP(S) Base URL without a query string or fragment.',
+      apiKeyRequired: 'Upstream API key is required.',
+      concurrencyInvalid: 'Concurrency must be an integer from 1 to 10000.',
+      mapping: {
+        required: 'Every mapping requires both a public model and an upstream model.',
+        wildcard: 'A public model wildcard may appear once at the end only.',
+        targetWildcard: 'The upstream model cannot contain a wildcard.',
+        duplicate: 'A public model cannot be mapped more than once.'
+      }
+    }
+  }
+}

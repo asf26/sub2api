@@ -1282,12 +1282,23 @@ update:
 # 任务完成后把生成的图片上传到对象存储，只在 Redis 存一个短链接，避免 gpt-image-1 等
 # 返回的大 base64 结果把 Redis 撑爆。
 #
-# enabled 同时是异步图片任务功能的总开关：为 false 或凭证未配全时，异步生图接口
-# 整体返回 404、不创建任务、不写 Redis。
+# enabled 只控制 S3：为 false 或凭证未配全时，异步生图接口继续工作，结果改存到
+# 服务器持久化目录，不依赖对象存储。
 #
 # 换其它厂商对象存储：只要它兼容 S3 API 即可直接用；如需完全自定义，实现
 # service.ImageStorage 接口（Save(ctx, key, contentType, data) -> url）即可。
+# XiaoAPI 兼容的异步视频接口。上游地址、Key、模型映射和售价都在 XiaoAPI
+# API-key 账号中动态配置；账号加入 xiaoapi 分组后才会参与调度。
+video_api:
+  enabled: false
+  # 下游可访问的平台公网地址，用于生成上传素材 URL；末尾不要加 /。
+  public_base_url: ""
+  request_timeout_seconds: 30
+  reconcile_interval_seconds: 30
+  reconcile_batch_size: 20
+
 image_storage:
+  # 此开关只控制 S3。关闭或 S3 配置不完整时，异步生图自动使用服务器本地存储。
   enabled: false
   # S3 兼容端点。AWS 官方可留空；R2 形如 https://<account_id>.r2.cloudflarestorage.com
   endpoint: ""
@@ -1307,3 +1318,8 @@ image_storage:
   presign_expiry_hours: 24
   # 当上游返回的是图片 url 时，下载该图片再转存的字节上限（默认 32MB）
   max_download_bytes: 33554432
+  # Docker 的 /app/data 已是持久化卷，升级容器不会删除本地图片。
+  local_directory: "./data/image-storage"
+  local_base_url: "/v1/images/files"
+  local_retention_hours: 48
+  local_cleanup_interval_minutes: 60

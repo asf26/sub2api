@@ -162,6 +162,9 @@ const labelClass = computed(() => {
   if (props.platform === 'grok') {
     return `${base} bg-zinc-300/70 text-zinc-800 dark:bg-zinc-700/60 dark:text-zinc-200`
   }
+  if (props.platform === 'xiaoapi') {
+    return `${base} bg-rose-200/70 text-rose-800 dark:bg-rose-900/50 dark:text-rose-300`
+  }
   if (props.platform === 'composite') {
     return `${base} bg-cyan-200/70 text-cyan-900 dark:bg-cyan-900/50 dark:text-cyan-300`
   }
@@ -199,6 +202,11 @@ const badgeClass = computed(() => {
     return isSubscription.value
       ? 'bg-zinc-200 text-zinc-800 dark:bg-zinc-700 dark:text-zinc-100'
       : 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200'
+  }
+  if (props.platform === 'xiaoapi') {
+    return isSubscription.value
+      ? 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300'
+      : 'bg-pink-50 text-pink-700 dark:bg-pink-900/20 dark:text-pink-300'
   }
   if (props.platform === 'composite') {
     return isSubscription.value

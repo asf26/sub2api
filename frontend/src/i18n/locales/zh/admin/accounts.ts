@@ -660,6 +660,33 @@ export default {
         testModeCompact: 'Compact 探测',
         modelRestrictionDisabledByPassthrough: '已开启自动透传：模型白名单/映射不会生效。',
       },
+      xiaoapi: {
+        baseUrlHint: '填写可动态切换的 XiaoAPI 视频上游地址',
+        apiKeyHint: '填写该视频上游分配的 API Key',
+        modelMapping: '模型映射',
+        addMapping: '添加映射',
+        publicModel: '对外模型',
+        upstreamModel: '上游模型',
+        pricing: '视频销售价格（USD）',
+        addPricing: '添加售价',
+        resolution: '分辨率',
+        pricePerSecond: '每秒售价',
+        audioPricePerSecond: '音频每秒附加价',
+        defaultDuration: '默认秒数',
+        defaultResolution: '默认',
+        baseUrlRequired: '请填写 XiaoAPI 上游 Base URL',
+        validation: {
+          required: '至少添加一条视频售价',
+          modelRequired: '每条售价都必须填写对外模型',
+          resolutionRequired: '每条售价都必须填写分辨率',
+          priceInvalid: '每秒售价必须大于或等于 0',
+          audioPriceInvalid: '音频每秒附加价必须大于或等于 0',
+          durationInvalid: '默认时长必须是 1 到 3600 秒的整数',
+          duplicateRule: '同一模型和分辨率不能重复定价',
+          multipleDefaults: '同一模型只能设置一个默认分辨率',
+          defaultRequired: '同一模型配置多个分辨率时必须选一个默认分辨率'
+        }
+      },
       grok: {
         baseUrlHint: 'Grok OAuth 账号会转发到官方 xAI API Base URL。',
         apiKeyHint: 'Grok 订阅支持使用 OAuth refresh token；API Key 账号不在本次范围内。'
@@ -711,7 +738,7 @@ export default {
       poolMode: '池模式',
       poolModeHint: '上游为账号池时启用，错误不标记本地账号状态',
       poolModeInfo:
-        '启用后，上游 429/403/401 错误将自动重试而不标记账号限流或错误，适用于上游指向另一个 sub2api 实例的场景。',
+        '启用后，上游 401/403/429 和短暂的 502/503/504 错误将自动重试而不标记账号限流或错误，适用于上游指向另一个 sub2api 实例的场景。',
       poolModeRetryCount: '同账号重试次数',
       poolModeRetryCountHint: '仅在池模式下生效。0 表示不原地重试；默认 {default}，最大 {max}。',
       poolModeRetryStatusCodes: '同账号重试状态码',

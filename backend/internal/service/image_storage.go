@@ -88,7 +88,7 @@ func (u *ImageResultUploader) Rewrite(ctx context.Context, taskID string, result
 		key := u.buildKey(taskID, i, contentType)
 		url, err := u.storage.Save(ctx, key, contentType, data)
 		if err != nil {
-			return nil, fmt.Errorf("image %d: upload to object storage: %w", i, err)
+			return nil, fmt.Errorf("image %d: save generated image: %w", i, err)
 		}
 		urlRaw, err := json.Marshal(url)
 		if err != nil {

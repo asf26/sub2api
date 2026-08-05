@@ -23,6 +23,7 @@ const (
 	PlatformGemini      = "gemini"
 	PlatformAntigravity = "antigravity"
 	PlatformGrok        = "grok"
+	PlatformXiaoAPI     = "xiaoapi"
 	PlatformComposite   = "composite"
 )
 

@@ -10,6 +10,17 @@ backend/migrations/*.sql text eol=lf
 *.js text eol=lf
 *.jsx text eol=lf
 *.vue text eol=lf
+*.json text eol=lf
+*.jsonc text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.svg text eol=lf
+*.webmanifest text eol=lf
+*.mod text eol=lf
+*.sum text eol=lf
+.gitignore text eol=lf
 
 # Shell 脚本
 *.sh text eol=lf

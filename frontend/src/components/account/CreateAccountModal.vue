@@ -160,6 +160,20 @@
             <PlatformIcon platform="grok" size="sm" />
             Grok
           </button>
+          <button
+            type="button"
+            data-testid="platform-xiaoapi"
+            @click="form.platform = 'xiaoapi'"
+            :class="[
+              'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
+              form.platform === 'xiaoapi'
+                ? 'bg-white text-rose-600 shadow-sm dark:bg-dark-600 dark:text-rose-400'
+                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
+            ]"
+          >
+            <PlatformIcon platform="xiaoapi" size="sm" />
+            XiaoAPI
+          </button>
         </div>
       </div>
 
@@ -1127,6 +1141,8 @@
                   ? 'https://generativelanguage.googleapis.com'
                   : form.platform === 'grok'
                     ? 'https://api.x.ai/v1'
+                    : form.platform === 'xiaoapi'
+                      ? 'https://provider.example/v1'
                     : 'https://api.anthropic.com'
             "
           />
@@ -1151,6 +1167,8 @@
                   ? 'AIza...'
                   : form.platform === 'grok'
                     ? 'xai-...'
+                    : form.platform === 'xiaoapi'
+                      ? 'provider-key...'
                     : 'sk-ant-...'
             "
           />
@@ -1159,6 +1177,7 @@
 
         <!-- 上游倍率自动探测：全部 API-key 平台可用（所在区块已限定 apikey 类型） -->
         <div
+          v-if="form.platform !== 'xiaoapi'"
           class="flex items-center justify-between gap-4 border-t border-gray-200 pt-4 dark:border-dark-600"
         >
           <div>
@@ -1184,8 +1203,14 @@
           <p class="input-hint">{{ t('admin.accounts.gemini.tier.aiStudioHint') }}</p>
         </div>
 
+        <XiaoVideoConfigEditor
+          v-if="form.platform === 'xiaoapi'"
+          v-model:pricing="xiaoVideoPricing"
+          v-model:mappings="modelMappings"
+        />
+
         <!-- Model Restriction Section (Antigravity 已在上层条件排除) -->
-        <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div v-if="form.platform !== 'xiaoapi'" class="border-t border-gray-200 pt-4 dark:border-dark-600">
           <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
 
           <div
@@ -3587,6 +3612,7 @@ import ProxySelector from '@/components/common/ProxySelector.vue'
 import ProxyAdBanner from '@/components/common/ProxyAdBanner.vue'
 import GroupSelector from '@/components/common/GroupSelector.vue'
 import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.vue'
+import XiaoVideoConfigEditor from '@/components/account/XiaoVideoConfigEditor.vue'
 import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
 import Toggle from '@/components/common/Toggle.vue'
 import GrokBaseUrlPresets from '@/components/account/GrokBaseUrlPresets.vue'
@@ -3601,6 +3627,12 @@ import {
 } from '@/components/account/credentialsBuilder'
 import { formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
 import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
+import {
+  createXiaoVideoPricingRule,
+  normalizeXiaoVideoPricing,
+  validateXiaoVideoPricing,
+  type XiaoVideoPricingRule
+} from '@/components/account/xiaoVideoPricing'
 import { VERTEX_LOCATION_OPTIONS } from '@/constants/account'
 import {
   OPENAI_WS_MODE_CTX_POOL,
@@ -3644,6 +3676,7 @@ const oauthStepTitle = computed(() => {
 const baseUrlHint = computed(() => {
   if (form.platform === 'openai') return t('admin.accounts.openai.baseUrlHint')
   if (form.platform === 'gemini') return t('admin.accounts.gemini.baseUrlHint')
+  if (form.platform === 'xiaoapi') return t('admin.accounts.xiaoapi.baseUrlHint')
   if (form.platform === 'grok') return ''
   return t('admin.accounts.baseUrlHint')
 })
@@ -3651,6 +3684,7 @@ const baseUrlHint = computed(() => {
 const apiKeyHint = computed(() => {
   if (form.platform === 'openai') return t('admin.accounts.openai.apiKeyHint')
   if (form.platform === 'gemini') return t('admin.accounts.gemini.apiKeyHint')
+  if (form.platform === 'xiaoapi') return t('admin.accounts.xiaoapi.apiKeyHint')
   if (form.platform === 'grok') return ''
   return t('admin.accounts.apiKeyHint')
 })
@@ -3755,12 +3789,13 @@ const editWeeklyResetDay = ref<number | null>(null)
 const editWeeklyResetHour = ref<number | null>(null)
 const editResetTimezone = ref<string | null>(null)
 const modelMappings = ref<ModelMapping[]>([])
+const xiaoVideoPricing = ref<XiaoVideoPricingRule[]>([createXiaoVideoPricingRule()])
 const openAICompactModelMappings = ref<ModelMapping[]>([])
 const modelRestrictionMode = ref<'whitelist' | 'mapping'>('whitelist')
 const allowedModels = ref<string[]>([])
 const DEFAULT_POOL_MODE_RETRY_COUNT = 3
 const MAX_POOL_MODE_RETRY_COUNT = 10
-const DEFAULT_POOL_MODE_RETRY_STATUS_CODES = [401, 403, 429]
+const DEFAULT_POOL_MODE_RETRY_STATUS_CODES = [401, 403, 429, 502, 503, 504]
 const poolModeEnabled = ref(false)
 const poolModeRetryCount = ref(DEFAULT_POOL_MODE_RETRY_COUNT)
 const poolModeRetryStatusCodesInput = ref('')
@@ -3920,10 +3955,12 @@ const openAITextGenerationCapabilityEnabled = computed(() =>
   openAIEndpointCapabilities.value.includes('chat_completions')
 )
 
-const normalizeOpenAIEndpointCapabilities = (values: OpenAIEndpointCapability[]) => {
+const normalizeOpenAIEndpointCapabilities = (
+  values: OpenAIEndpointCapability[]
+): OpenAIEndpointCapability[] => {
   const allowed: OpenAIEndpointCapability[] = ['chat_completions', 'embeddings']
   const selected = allowed.filter((value) => values.includes(value))
-  return selected.length > 0 ? selected : allowed
+  return selected.length > 0 ? selected : ['chat_completions', 'embeddings']
 }
 
 const toggleOpenAIEndpointCapability = (capability: OpenAIEndpointCapability, event?: Event) => {
@@ -3949,6 +3986,7 @@ const toggleOpenAIEndpointCapability = (capability: OpenAIEndpointCapability, ev
 
 const applyOpenAIEndpointCapabilities = (credentials: Record<string, unknown>) => {
   const capabilities = normalizeOpenAIEndpointCapabilities(openAIEndpointCapabilities.value)
+  delete credentials.video_preauthorization_amount
   if (capabilities.length === 2) {
     delete credentials.openai_capabilities
     return
@@ -4231,6 +4269,8 @@ watch(
           ? 'https://generativelanguage.googleapis.com'
           : newPlatform === 'grok'
             ? 'https://api.x.ai/v1'
+            : newPlatform === 'xiaoapi'
+              ? ''
             : 'https://api.anthropic.com'
     // Clear model-related settings
     allowedModels.value = []
@@ -4257,6 +4297,17 @@ watch(
       modelRestrictionMode.value = 'mapping'
       form.concurrency = 1
       form.load_factor = null
+    }
+    if (newPlatform === 'xiaoapi') {
+      accountCategory.value = 'apikey'
+      addMethod.value = 'oauth'
+      modelRestrictionMode.value = 'mapping'
+      xiaoVideoPricing.value = [createXiaoVideoPricingRule()]
+      upstreamBillingAutoProbeEnabled.value = false
+      form.concurrency = 2
+      form.load_factor = null
+    } else if (newPlatform !== 'antigravity') {
+      upstreamBillingAutoProbeEnabled.value = true
     }
     if (newPlatform !== 'gemini' && newPlatform !== 'anthropic' && accountCategory.value === 'service_account') {
       accountCategory.value = 'oauth-based'
@@ -4686,6 +4737,7 @@ const resetForm = () => {
   editWeeklyResetHour.value = null
   editResetTimezone.value = null
   modelMappings.value = []
+  xiaoVideoPricing.value = [createXiaoVideoPricingRule()]
   openAICompactModelMappings.value = []
   modelRestrictionMode.value = 'whitelist'
   allowedModels.value = [...claudeModels] // Default fill related models
@@ -5102,6 +5154,18 @@ const handleSubmit = async () => {
     return
   }
 
+  if (form.platform === 'xiaoapi') {
+    if (!apiKeyBaseUrl.value.trim()) {
+      appStore.showError(t('admin.accounts.xiaoapi.baseUrlRequired'))
+      return
+    }
+    const pricingError = validateXiaoVideoPricing(xiaoVideoPricing.value)
+    if (pricingError) {
+      appStore.showError(t(`admin.accounts.xiaoapi.validation.${pricingError}`))
+      return
+    }
+  }
+
   // For apikey type, create directly
   if (!apiKeyValue.value.trim()) {
     appStore.showError(t('admin.accounts.pleaseEnterApiKey'))
@@ -5116,6 +5180,8 @@ const handleSubmit = async () => {
         ? 'https://generativelanguage.googleapis.com'
         : form.platform === 'grok'
           ? 'https://api.x.ai/v1'
+          : form.platform === 'xiaoapi'
+            ? ''
           : 'https://api.anthropic.com'
 
   // Build credentials with optional model mapping
@@ -5129,7 +5195,8 @@ const handleSubmit = async () => {
 
   // Add model mapping if configured（OpenAI 开启自动透传时不应用）
   if (!isOpenAIModelRestrictionDisabled.value) {
-    const modelMapping = buildModelMappingObject(modelRestrictionMode.value, allowedModels.value, modelMappings.value)
+    const restrictionMode = form.platform === 'xiaoapi' ? 'mapping' : modelRestrictionMode.value
+    const modelMapping = buildModelMappingObject(restrictionMode, allowedModels.value, modelMappings.value)
     if (modelMapping) {
       credentials.model_mapping = modelMapping
     }
@@ -5140,6 +5207,9 @@ const handleSubmit = async () => {
     if (compactModelMapping) {
       credentials.compact_model_mapping = compactModelMapping
     }
+  }
+  if (form.platform === 'xiaoapi') {
+    credentials.video_pricing = normalizeXiaoVideoPricing(xiaoVideoPricing.value)
   }
 
   // Add pool mode if enabled
@@ -5182,7 +5252,7 @@ const handleSubmit = async () => {
     ...form,
     group_ids: form.group_ids,
     extra,
-    upstream_billing_probe_enabled: upstreamBillingAutoProbeEnabled.value,
+    upstream_billing_probe_enabled: form.platform === 'xiaoapi' ? false : upstreamBillingAutoProbeEnabled.value,
     auto_pause_on_expired: autoPauseOnExpired.value
   })
 }
@@ -5313,7 +5383,7 @@ const createAccountAndFinish = async (
     expires_at: form.expires_at,
     // 上游倍率探测对全部 API-key 平台开放（antigravity upstream 走本 helper）；
     // 非 apikey 类型（bedrock/oauth）不传，后端不动作。
-    upstream_billing_probe_enabled: type === 'apikey' ? upstreamBillingAutoProbeEnabled.value : undefined,
+    upstream_billing_probe_enabled: type === 'apikey' ? (platform === 'xiaoapi' ? false : upstreamBillingAutoProbeEnabled.value) : undefined,
     auto_pause_on_expired: autoPauseOnExpired.value
   })
 }

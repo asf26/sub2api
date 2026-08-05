@@ -71,13 +71,21 @@ export const useAnnouncementStore = defineStore('announcements', () => {
     shownPopupIds.add(currentPopup.value.id)
   }
 
+  function openPopup(announcement: UserAnnouncement) {
+    popupQueue.value = popupQueue.value.filter((item) => item.id !== announcement.id)
+    currentPopup.value = announcement
+    shownPopupIds.add(announcement.id)
+  }
+
   async function dismissPopup() {
     if (!currentPopup.value) return
-    const id = currentPopup.value.id
+    const announcement = currentPopup.value
     currentPopup.value = null
 
-    // Mark as read (fire-and-forget, UI already updated)
-    markAsRead(id)
+    if (!announcement.read_at) {
+      // Mark as read (fire-and-forget, UI already updated)
+      markAsRead(announcement.id)
+    }
 
     // Show next popup after a short delay
     if (popupQueue.value.length > 0) {
@@ -135,6 +143,7 @@ export const useAnnouncementStore = defineStore('announcements', () => {
     unreadCount,
     // Actions
     fetchAnnouncements,
+    openPopup,
     dismissPopup,
     markAsRead,
     markAllAsRead,
