@@ -2,28 +2,13 @@
   <UserWorkspaceLayout>
     <div class="video-studio">
       <header class="video-studio__header">
-        <div>
+        <div class="video-studio__heading">
           <span class="video-studio__eyebrow"><Icon name="play" size="sm" /> AI 视频创作</span>
-          <h1>把灵感变成有声画面</h1>
-          <p>选择自己的视频 Key，模型、任务、计费与素材都通过当前平台完成。</p>
+          <h1>视频创作</h1>
         </div>
-        <div class="video-studio__keybar">
-          <label>
-            <span>创作 Key</span>
-            <select v-model="selectedKeyId" :disabled="loadingKeys || videoKeys.length === 0">
-              <option value="">选择 XiaoAPI 分组 Key</option>
-              <option v-for="key in videoKeys" :key="key.id" :value="String(key.id)">
-                {{ key.name }} · {{ key.group?.name || '视频分组' }}
-              </option>
-            </select>
-          </label>
-          <button type="button" class="video-icon-button" title="刷新 Key" :disabled="loadingKeys" @click="loadKeys">
-            <Icon name="refresh" size="sm" :class="{ 'animate-spin': loadingKeys }" />
-          </button>
-          <router-link to="/docs/video-api" class="video-doc-link">
-            <Icon name="book" size="sm" /> API 文档
-          </router-link>
-        </div>
+        <router-link to="/docs/video-api" class="video-doc-link">
+          <Icon name="book" size="sm" /> API 文档
+        </router-link>
       </header>
 
       <div v-if="!selectedKey && !loadingKeys" class="video-studio__empty">
@@ -33,44 +18,115 @@
         <router-link v-if="videoKeys.length === 0" to="/keys?create=1">创建 Key</router-link>
       </div>
 
-      <div v-else class="video-studio__workspace">
-        <aside class="video-studio__models" aria-label="视频模型">
-          <div class="video-panel-title">
-            <div>
-              <span>模型</span>
-              <strong>{{ capabilities.length }} 个可用</strong>
+      <div v-else class="video-studio__shell">
+        <section class="video-studio__setup" aria-label="创作配置">
+          <div class="video-control-field video-key-control">
+            <div class="video-control-label">
+              <label for="video-key-select">创作 Key</label>
+              <span>{{ videoKeys.length }} 个可用</span>
             </div>
-            <button type="button" class="video-icon-button" title="刷新模型" :disabled="loadingModels" @click="loadWorkspace">
-              <Icon name="refresh" size="sm" :class="{ 'animate-spin': loadingModels }" />
-            </button>
+            <div class="video-key-select">
+              <select id="video-key-select" v-model="selectedKeyId" :disabled="loadingKeys || videoKeys.length === 0">
+                <option value="">选择 XiaoAPI 分组 Key</option>
+                <option v-for="key in videoKeys" :key="key.id" :value="String(key.id)">
+                  {{ key.name }} · {{ key.group?.name || '视频分组' }}
+                </option>
+              </select>
+              <button type="button" class="video-icon-button" title="刷新 Key" :disabled="loadingKeys" @click="loadKeys">
+                <Icon name="refresh" size="sm" :class="{ 'animate-spin': loadingKeys }" />
+              </button>
+            </div>
           </div>
-          <div v-if="loadingModels" class="video-studio__loading">正在读取平台模型…</div>
-          <button
-            v-for="item in capabilities"
-            v-else
-            :key="item.id"
-            type="button"
-            class="video-model-option"
-            :class="{ 'video-model-option--active': selectedModelId === item.id }"
-            @click="selectedModelId = item.id"
-          >
-            <span class="video-model-option__icon"><Icon name="play" size="sm" /></span>
-            <span>
-              <strong>{{ item.label }}</strong>
-              <small>{{ item.resolutions.join(' · ') }}</small>
-            </span>
-            <Icon v-if="selectedModelId === item.id" name="checkCircle" size="sm" />
+
+          <div class="video-control-field video-model-picker" @focusout="handleModelPickerFocusOut">
+            <div class="video-control-label">
+              <label for="video-model-search">视频模型</label>
+              <span>{{ loadingModels ? '读取中' : `${capabilities.length} 个可用` }}</span>
+            </div>
+            <div class="video-model-combobox" :class="{ 'video-model-combobox--open': modelMenuOpen }">
+              <Icon name="search" size="sm" />
+              <input
+                id="video-model-search"
+                v-model="modelSearchText"
+                type="search"
+                role="combobox"
+                autocomplete="off"
+                aria-autocomplete="list"
+                aria-controls="video-model-options"
+                :aria-expanded="modelMenuOpen"
+                :aria-activedescendant="activeModelOptionId"
+                :disabled="loadingModels || capabilities.length === 0"
+                placeholder="输入模型名称或 ID"
+                @focus="openModelMenu"
+                @input="handleModelSearchInput"
+                @keydown="handleModelSearchKeydown"
+              />
+              <button
+                type="button"
+                title="展开模型列表"
+                :disabled="loadingModels || capabilities.length === 0"
+                @mousedown.prevent
+                @click="toggleModelMenu"
+              >
+                <Icon :name="modelMenuOpen ? 'chevronUp' : 'chevronDown'" size="sm" />
+              </button>
+            </div>
+
+            <div v-if="modelMenuOpen" id="video-model-options" class="video-model-menu" role="listbox">
+              <div v-if="loadingModels" class="video-model-menu__empty">正在读取平台模型…</div>
+              <button
+                v-for="(item, index) in filteredCapabilities"
+                v-else
+                :id="modelOptionId(item.id)"
+                :key="item.id"
+                type="button"
+                role="option"
+                class="video-model-option"
+                :class="{
+                  'video-model-option--active': selectedModelId === item.id,
+                  'video-model-option--highlighted': highlightedModelIndex === index,
+                }"
+                :aria-selected="selectedModelId === item.id"
+                @mouseenter="highlightedModelIndex = index"
+                @mousedown.prevent
+                @click="selectModel(item)"
+              >
+                <span class="video-model-option__icon"><Icon name="play" size="sm" /></span>
+                <span class="video-model-option__copy">
+                  <strong>{{ item.label }}</strong>
+                  <small>{{ item.id }}</small>
+                </span>
+                <span class="video-model-option__meta">
+                  <small>{{ item.resolutions.join(' · ') }}</small>
+                  <em v-if="item.supportsAudio">音轨</em>
+                  <em v-if="Object.values(item.maxReferences).some((count) => count > 0)">素材</em>
+                </span>
+                <Icon v-if="selectedModelId === item.id" name="checkCircle" size="sm" />
+              </button>
+              <div v-if="!loadingModels && filteredCapabilities.length === 0" class="video-model-menu__empty">
+                没有匹配的模型
+              </div>
+            </div>
+
+            <div v-if="selectedCapability" class="video-model-summary">
+              <span>{{ selectedCapability.id }}</span>
+              <small v-for="item in selectedCapability.resolutions" :key="item">{{ item }}</small>
+              <small v-if="selectedCapability.supportsAudio">支持音轨</small>
+            </div>
+          </div>
+
+          <button type="button" class="video-icon-button video-refresh-workspace" title="刷新模型和任务" :disabled="loadingModels || loadingJobs" @click="loadWorkspace">
+            <Icon name="refresh" size="sm" :class="{ 'animate-spin': loadingModels || loadingJobs }" />
           </button>
-          <div v-if="!loadingModels && capabilities.length === 0" class="video-studio__loading">
-            当前 Key 没有已定价的视频模型
-          </div>
-        </aside>
+        </section>
+
+        <div class="video-studio__workspace">
 
         <main class="video-composer">
           <div class="video-composer__topline">
             <div>
-              <span>创作方式</span>
-              <strong>{{ selectedCapability?.label || '请选择模型' }}</strong>
+              <span>创作内容</span>
+              <strong>{{ selectedCapability?.label || '请选择模型' }} · {{ selectedModeLabel }}</strong>
             </div>
             <span v-if="retryingSameRequest" class="video-retry-badge">可安全重试</span>
           </div>
@@ -154,13 +210,13 @@
             <textarea
               v-model="prompt"
               :maxlength="selectedCapability?.promptLimit || 5000"
-              rows="6"
+              rows="5"
               placeholder="描述主体、动作、环境、镜头运动、光线和整体风格…"
             ></textarea>
           </label>
 
-          <section class="video-settings">
-            <div class="video-setting video-setting--wide">
+          <section class="video-settings" aria-label="生成参数">
+            <div class="video-setting video-setting--resolution">
               <span>分辨率</span>
               <div class="video-segments">
                 <button
@@ -181,7 +237,7 @@
               </div>
             </div>
 
-            <div class="video-setting video-setting--wide">
+            <div class="video-setting video-setting--ratio">
               <span>画面比例</span>
               <div class="video-segments video-segments--ratios">
                 <button
@@ -270,6 +326,7 @@
           </article>
         </aside>
       </div>
+      </div>
     </div>
   </UserWorkspaceLayout>
 </template>
@@ -356,6 +413,9 @@ const models = ref<VideoModel[]>([])
 const jobs = ref<VideoJob[]>([])
 const selectedKeyId = ref('')
 const selectedModelId = ref('')
+const modelSearchText = ref('')
+const modelMenuOpen = ref(false)
+const highlightedModelIndex = ref(0)
 const creationMode = ref<VideoCreationMode>('text')
 const prompt = ref('')
 const resolution = ref('')
@@ -400,10 +460,81 @@ const availableModes = computed(() => {
   }
   return modes
 })
+const selectedModeLabel = computed(() => availableModes.value.find((item) => item.value === creationMode.value)?.label || '文生视频')
+const filteredCapabilities = computed(() => {
+  const query = modelSearchText.value.trim().toLocaleLowerCase()
+  const selected = selectedCapability.value
+  if (!query || query === selected?.label.toLocaleLowerCase() || query === selected?.id.toLocaleLowerCase()) {
+    return capabilities.value
+  }
+  return capabilities.value.filter((item) => (
+    `${item.label} ${item.id} ${item.resolutions.join(' ')}`.toLocaleLowerCase().includes(query)
+  ))
+})
+const activeModelOptionId = computed(() => {
+  const item = filteredCapabilities.value[highlightedModelIndex.value]
+  return modelMenuOpen.value && item ? modelOptionId(item.id) : undefined
+})
 const canSubmit = computed(() => Boolean(selectedKey.value && selectedCapability.value && prompt.value.trim()))
 const retryingSameRequest = computed(() => Boolean(pendingIdempotencyKey.value && pendingRequestBody.value))
 
 function selectedIdStorageKey() { return 'lingqu:video-studio:selected-key-id' }
+function modelOptionId(id: string) { return `video-model-${id.replace(/[^a-zA-Z0-9_-]/g, '-')}` }
+function syncModelSearch() { modelSearchText.value = selectedCapability.value?.label || '' }
+function openModelMenu(event?: FocusEvent) {
+  if (loadingModels.value || capabilities.value.length === 0) return
+  modelMenuOpen.value = true
+  const selectedIndex = filteredCapabilities.value.findIndex((item) => item.id === selectedModelId.value)
+  highlightedModelIndex.value = Math.max(0, selectedIndex)
+  if (event?.currentTarget instanceof HTMLInputElement && modelSearchText.value === selectedCapability.value?.label) {
+    event.currentTarget.select()
+  }
+}
+function toggleModelMenu() {
+  if (modelMenuOpen.value) {
+    modelMenuOpen.value = false
+    syncModelSearch()
+    return
+  }
+  openModelMenu()
+}
+function handleModelSearchInput() {
+  modelMenuOpen.value = true
+  highlightedModelIndex.value = 0
+}
+function handleModelSearchKeydown(event: KeyboardEvent) {
+  const options = filteredCapabilities.value
+  if (event.key === 'Escape') {
+    modelMenuOpen.value = false
+    syncModelSearch()
+    return
+  }
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault()
+    if (!modelMenuOpen.value) openModelMenu()
+    if (options.length === 0) return
+    const direction = event.key === 'ArrowDown' ? 1 : -1
+    highlightedModelIndex.value = (highlightedModelIndex.value + direction + options.length) % options.length
+    return
+  }
+  if (event.key === 'Enter' && modelMenuOpen.value) {
+    event.preventDefault()
+    const item = options[highlightedModelIndex.value]
+    if (item) selectModel(item)
+  }
+}
+function selectModel(item: VideoModelCapability) {
+  selectedModelId.value = item.id
+  modelSearchText.value = item.label
+  modelMenuOpen.value = false
+}
+function handleModelPickerFocusOut(event: FocusEvent) {
+  const picker = event.currentTarget as HTMLElement
+  const next = event.relatedTarget as Node | null
+  if (next && picker.contains(next)) return
+  modelMenuOpen.value = false
+  syncModelSearch()
+}
 function modelLabel(id: string) { return knownCapabilityLabel(id) || id }
 function knownCapabilityLabel(id: string) { return capabilities.value.find((item) => item.id === id)?.label || '' }
 function shortJobId(id: string) { return id.length > 16 ? `${id.slice(0, 9)}…${id.slice(-5)}` : id }
@@ -503,6 +634,7 @@ async function loadKeys() {
 async function loadWorkspace() {
   const key = selectedKey.value
   const requestId = ++workspaceRequest
+  const previousModelId = selectedModelId.value
   clearPolling()
   models.value = []; jobs.value = []; selectedModelId.value = ''
   if (!key) return
@@ -511,7 +643,7 @@ async function loadWorkspace() {
     const [nextModels] = await Promise.all([videoAPI.listModels(key.key), loadJobs()])
     if (requestId !== workspaceRequest) return
     models.value = nextModels
-    const preferred = nextModels.find((model) => model.id === selectedModelId.value) || nextModels[0]
+    const preferred = nextModels.find((model) => model.id === previousModelId) || nextModels[0]
     selectedModelId.value = preferred?.id || ''
   } catch (error) {
     if (requestId === workspaceRequest) appStore.showError(errorMessage(error))
@@ -661,7 +793,12 @@ watch(selectedKeyId, () => {
   loadWorkspace()
 })
 watch(selectedCapability, (capability) => {
-  if (!capability) return
+  if (!capability) {
+    modelSearchText.value = ''
+    modelMenuOpen.value = false
+    return
+  }
+  modelSearchText.value = capability.label
   resolution.value = capability.defaultResolution
   const durationValue = capability.defaultDuration
   durationIndex.value = Math.max(0, durationsFor(capability, resolution.value).indexOf(durationValue))
@@ -746,4 +883,171 @@ button:not(:disabled), select:not(:disabled), input[type='range'] { cursor: poin
 
 @media (max-width: 1180px) { .video-studio__workspace { grid-template-columns: 12rem minmax(0,1fr); }.video-jobs { grid-column: 1 / -1; max-height: none; grid-template-columns: repeat(3,minmax(0,1fr)); }.video-jobs .video-panel-title,.video-jobs .video-preview,.video-jobs .video-jobs__empty,.video-jobs .video-studio__loading { grid-column: 1 / -1; } }
 @media (max-width: 760px) { .video-studio__header { align-items: stretch; flex-direction: column; }.video-studio__keybar { flex-wrap: wrap; }.video-studio__keybar label { width: 100%; }.video-studio__keybar select { width: 100%; }.video-studio__workspace { grid-template-columns: 1fr; }.video-studio__models { grid-template-columns: repeat(2,minmax(0,1fr)); }.video-studio__models .video-panel-title,.video-studio__models .video-studio__loading { grid-column: 1 / -1; }.video-media-band,.video-settings { grid-template-columns: 1fr; }.video-setting--wide { grid-column: auto; }.video-mode-tabs { grid-template-columns: 1fr; }.video-jobs { grid-column: auto; grid-template-columns: 1fr; }.video-composer__actions { align-items: stretch; flex-direction: column; }.video-composer__actions button { justify-content: center; }.video-studio__header h1 { font-size: 1.35rem; } }
+
+/* Compact creator workspace */
+.video-studio { gap: .75rem; }
+.video-studio__header {
+  align-items: center;
+  border-width: 1px;
+  box-shadow: 3px 3px 0 #211f1c;
+  padding: .7rem .9rem;
+}
+.video-studio__heading { display: flex; align-items: center; gap: .7rem; min-width: 0; }
+.video-studio__header h1 { margin: 0; font-size: 1.25rem; letter-spacing: 0; }
+.video-studio__eyebrow { border-right: 1px solid #d3c9be; padding-right: .7rem; white-space: nowrap; }
+.video-doc-link { min-height: 2.25rem; padding: 0 .65rem; }
+.video-studio__shell { display: grid; gap: .75rem; min-width: 0; }
+.video-studio__setup {
+  position: relative;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: minmax(13rem, .8fr) minmax(22rem, 1.35fr) 2.3rem;
+  align-items: start;
+  gap: .75rem;
+  min-width: 0;
+  border: 1px solid rgba(33,31,28,.22);
+  border-radius: 8px;
+  background: rgba(255,253,245,.96);
+  padding: .7rem;
+  box-shadow: 0 6px 18px rgba(72,58,45,.06);
+}
+.video-control-field { display: grid; min-width: 0; gap: .3rem; }
+.video-control-label { display: flex; align-items: center; justify-content: space-between; gap: .5rem; min-height: 1rem; }
+.video-control-label label { font-size: .7rem; font-weight: 900; }
+.video-control-label span { color: #817970; font-size: .61rem; font-weight: 700; }
+.video-key-select { display: grid; grid-template-columns: minmax(0,1fr) 2.3rem; gap: .35rem; }
+.video-key-select select { width: 100%; min-width: 0; min-height: 2.3rem; }
+.video-key-select .video-icon-button,
+.video-refresh-workspace { min-width: 2.3rem; min-height: 2.3rem; }
+.video-refresh-workspace { align-self: end; }
+.video-model-picker { position: relative; }
+.video-model-combobox {
+  display: grid;
+  grid-template-columns: 1rem minmax(0,1fr) 2rem;
+  align-items: center;
+  min-height: 2.3rem;
+  border: 1px solid #b8aea3;
+  border-radius: 6px;
+  background: #fff;
+  padding-left: .65rem;
+  color: #817970;
+}
+.video-model-combobox:focus-within,
+.video-model-combobox--open { border-color: #08799a; box-shadow: 0 0 0 2px rgba(8,121,154,.14); }
+.video-model-combobox input {
+  width: 100%;
+  min-width: 0;
+  height: 2.2rem;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  padding: 0 .55rem;
+  color: #211f1c;
+  font-size: .75rem;
+  font-weight: 800;
+}
+.video-model-combobox input::-webkit-search-cancel-button { display: none; }
+.video-model-combobox button {
+  display: grid;
+  width: 2rem;
+  height: 2.2rem;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: #59524c;
+}
+.video-model-menu {
+  position: absolute;
+  top: calc(100% - 1.2rem);
+  right: 0;
+  left: 0;
+  z-index: 12;
+  display: grid;
+  max-height: min(22rem, 55vh);
+  overflow-y: auto;
+  border: 1px solid #8f857b;
+  border-radius: 7px;
+  background: #fff;
+  padding: .3rem;
+  box-shadow: 0 14px 32px rgba(33,31,28,.2);
+}
+.video-model-menu__empty { display: grid; min-height: 5rem; place-items: center; color: #817970; font-size: .7rem; }
+.video-model-option {
+  grid-template-columns: 2rem minmax(0,1fr) auto 1rem;
+  min-height: 3.25rem;
+  padding: .45rem .5rem;
+}
+.video-model-option--highlighted { border-color: #c3b7aa; background: #f8f6f2; }
+.video-model-option--active { border-color: #08799a; box-shadow: inset 3px 0 0 #08799a; }
+.video-model-option__copy { min-width: 0; }
+.video-model-option__copy strong { font-size: .73rem; }
+.video-model-option__copy small { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.video-model-option__meta { display: flex; max-width: 12rem; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .2rem; }
+.video-model-option__meta small { width: 100%; text-align: right; }
+.video-model-option__meta em {
+  border-radius: 3px;
+  background: #e7f7fb;
+  padding: .08rem .24rem;
+  color: #08799a;
+  font-size: .52rem;
+  font-style: normal;
+  font-weight: 900;
+}
+.video-model-summary { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: .25rem; min-height: 1rem; }
+.video-model-summary span { max-width: 15rem; overflow: hidden; color: #817970; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .56rem; text-overflow: ellipsis; white-space: nowrap; }
+.video-model-summary small { border-radius: 3px; background: #eee9e2; padding: .08rem .23rem; color: #655e57; font-size: .52rem; font-weight: 800; }
+.video-studio__workspace { grid-template-columns: minmax(0,1fr) minmax(18rem,20rem); gap: .75rem; }
+.video-composer,
+.video-jobs { border-color: rgba(33,31,28,.22); background: rgba(255,253,245,.96); }
+.video-composer { padding: .85rem; }
+.video-jobs { position: sticky; top: .75rem; gap: .45rem; max-height: calc(100vh - 7rem); padding: .7rem; }
+.video-composer__topline strong { font-size: .86rem; }
+.video-mode-tabs { grid-template-columns: repeat(3,minmax(0,1fr)); margin: .65rem 0; }
+.video-prompt textarea { min-height: 7.5rem; }
+.video-settings { grid-template-columns: repeat(3,minmax(0,1fr)); gap: .65rem; margin-top: .7rem; padding-top: .7rem; }
+.video-setting,
+.video-audio-toggle { min-width: 0; border: 1px solid #e0d8cf; border-radius: 6px; background: rgba(255,255,255,.58); padding: .55rem; }
+.video-setting--resolution { grid-column: span 2; }
+.video-setting--ratio { grid-column: span 2; }
+.video-setting > span,
+.video-prompt > span strong { font-size: .68rem; font-weight: 900; }
+.video-setting select { min-height: 2.15rem; }
+.video-composer__actions { margin-top: .7rem; padding-top: .7rem; }
+.video-composer__actions button { min-height: 2.45rem; }
+
+@media (max-width: 1280px) {
+  .video-studio__workspace { grid-template-columns: 1fr; }
+  .video-jobs { position: static; grid-column: auto; grid-template-columns: repeat(3,minmax(0,1fr)); max-height: none; }
+  .video-jobs .video-panel-title,
+  .video-jobs .video-preview,
+  .video-jobs .video-jobs__empty,
+  .video-jobs .video-studio__loading { grid-column: 1 / -1; }
+}
+@media (max-width: 900px) {
+  .video-studio__setup { grid-template-columns: minmax(0,1fr) minmax(0,1.25fr) 2.3rem; }
+  .video-settings { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .video-setting--resolution,
+  .video-setting--ratio { grid-column: span 1; }
+}
+@media (max-width: 680px) {
+  .video-studio__header { flex-direction: row; align-items: center; gap: .5rem; }
+  .video-studio__heading { gap: .5rem; }
+  .video-studio__eyebrow { display: none; }
+  .video-studio__header h1 { font-size: 1.1rem; }
+  .video-doc-link { min-width: 2.25rem; padding: 0 .55rem; }
+  .video-studio__setup { grid-template-columns: minmax(0,1fr); }
+  .video-key-control,
+  .video-model-picker { grid-column: auto; }
+  .video-refresh-workspace { display: none; }
+  .video-model-menu { top: calc(100% - 1.1rem); }
+  .video-model-option { grid-template-columns: 2rem minmax(0,1fr) 1rem; }
+  .video-model-option__meta { display: none; }
+  .video-mode-tabs { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .video-mode-tabs button { padding: 0 .2rem; }
+  .video-media-band,
+  .video-settings { grid-template-columns: 1fr; }
+  .video-jobs { grid-template-columns: 1fr; }
+  .video-composer__actions { align-items: stretch; flex-direction: column; }
+  .video-composer__actions button { justify-content: center; }
+}
 </style>

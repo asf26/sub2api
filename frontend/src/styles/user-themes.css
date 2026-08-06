@@ -422,7 +422,7 @@
 
 .user-workspace[data-user-theme='business'] :is(
   .video-studio__header,
-  .video-studio__models,
+  .video-studio__setup,
   .video-composer,
   .video-jobs,
   .video-studio__empty,
@@ -435,7 +435,7 @@
 }
 
 .user-workspace[data-user-theme='business'] .video-studio__header {
-  padding: 0.85rem 1rem;
+  padding: 0.7rem 0.9rem;
 }
 
 .user-workspace[data-user-theme='business'] :is(
@@ -471,6 +471,22 @@
   border-color: #2456a6;
   background: #eef4fc;
   box-shadow: inset 3px 0 0 #2456a6;
+}
+
+.user-workspace[data-user-theme='business'] .video-model-combobox:focus-within,
+.user-workspace[data-user-theme='business'] .video-model-combobox--open {
+  border-color: #2456a6;
+  box-shadow: 0 0 0 2px rgba(36, 86, 166, 0.12);
+}
+
+.user-workspace[data-user-theme='business'] .video-model-menu {
+  border-color: #c7d2dc;
+  box-shadow: 0 12px 28px rgba(32, 42, 51, 0.14);
+}
+
+.user-workspace[data-user-theme='business'] .video-model-option--highlighted {
+  border-color: #c7d2dc;
+  background: #f5f7f9;
 }
 
 .user-workspace[data-user-theme='business'] .video-model-option__icon,
